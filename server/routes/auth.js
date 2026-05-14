@@ -5,8 +5,9 @@ const jwt = require('jsonwebtoken');
 const db = require('../db');
 const auth = require('../middleware/auth');
 const { getPermissionsForRole, requirePermission } = require('../utils/permissions');
+const { getJwtSecret } = require('../utils/authConfig');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'modosabor_jwt_2024';
+const JWT_SECRET = getJwtSecret();
 
 router.post('/login', (req, res) => {
   const { email, password } = req.body;
@@ -23,18 +24,56 @@ router.post('/login', (req, res) => {
       nombre: user.nombre,
       email: user.email,
       rol: user.rol,
+      avatar: user.avatar,
       permissions: getPermissionsForRole(user.rol),
     },
   });
 });
 
 router.get('/me', auth, (req, res) => {
-  const user = db.prepare('SELECT id, nombre, email, rol, activo, creado_en FROM usuarios WHERE id = ? AND activo = 1').get(req.user.id);
+  const user = db.prepare('SELECT id, nombre, email, rol, activo, avatar, creado_en FROM usuarios WHERE id = ? AND activo = 1').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
   res.json({
     ...user,
     permissions: getPermissionsForRole(user.rol),
   });
+});
+
+router.put('/me', auth, (req, res) => {
+  const existing = db.prepare('SELECT id, nombre, email, rol, activo, avatar, creado_en FROM usuarios WHERE id = ? AND activo = 1').get(req.user.id);
+  if (!existing) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  const nombre = String(req.body?.nombre || '').trim();
+  const email = String(req.body?.email || '').trim().toLowerCase();
+
+  if (!nombre || !email) {
+    return res.status(400).json({ error: 'Nombre y email son obligatorios' });
+  }
+
+  const duplicated = db.prepare('SELECT id FROM usuarios WHERE lower(email) = ? AND id != ?').get(email, req.user.id);
+  if (duplicated) {
+    return res.status(400).json({ error: 'Ya existe un usuario con ese email' });
+  }
+
+  db.prepare('UPDATE usuarios SET nombre = ?, email = ? WHERE id = ?').run(nombre, email, req.user.id);
+
+  const user = db.prepare('SELECT id, nombre, email, rol, activo, avatar, creado_en FROM usuarios WHERE id = ? AND activo = 1').get(req.user.id);
+  res.json({
+    ...user,
+    permissions: getPermissionsForRole(user.rol),
+  });
+});
+
+router.get('/me/activity', auth, (req, res) => {
+  const rows = db.prepare(`
+    SELECT id, modulo, accion, entidad, entidad_id, detalle, creado_en
+    FROM auditoria_eventos
+    WHERE actor_id = ?
+    ORDER BY datetime(creado_en) DESC, id DESC
+    LIMIT 20
+  `).all(req.user.id);
+
+  res.json(rows);
 });
 
 router.get('/usuarios', auth, requirePermission('config.manage'), (_req, res) => {
@@ -92,6 +131,12 @@ router.put('/password', auth, (req, res) => {
     return res.status(400).json({ error: 'Contrasena actual incorrecta' });
   }
   db.prepare('UPDATE usuarios SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password_nuevo, 10), req.user.id);
+  res.json({ success: true });
+});
+
+router.put('/me/avatar', auth, (req, res) => {
+  const { avatar } = req.body;
+  db.prepare('UPDATE usuarios SET avatar = ? WHERE id = ?').run(avatar || '', req.user.id);
   res.json({ success: true });
 });
 

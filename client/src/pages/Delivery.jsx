@@ -1,614 +1,684 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import api from '../lib/api.js';
-import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Plus, Pencil, Trash2, X, Bike, Phone, MapPin, CheckCircle, UserCheck, RefreshCw, Navigation, ExternalLink } from 'lucide-react';
+import { 
+  AlertCircle, 
+  Bike, 
+  Clock3, 
+  MapPinned, 
+  Pencil, 
+  RefreshCw, 
+  Smartphone, 
+  Trash2, 
+  UserCheck, 
+  UserPlus, 
+  X, 
+  Camera, 
+  MapPin, 
+  Phone, 
+  Briefcase, 
+  Calendar, 
+  History, 
+  Star, 
+  CheckCircle2, 
+  Navigation,
+  ExternalLink,
+  ChevronRight,
+  User,
+  ShoppingBag,
+  MoreVertical,
+  Mail,
+  ShieldCheck,
+  FileText,
+  Map as MapIcon,
+  Globe,
+  Check,
+  Info,
+  Map as MapIcon2
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { SOCKET_URL, UPLOADS_BASE_URL } from '../lib/runtime.js';
+import { useAuthenticatedSocket } from '../hooks/useAuthenticatedSocket.js';
 
-const fmt = n => `$${Number(n || 0).toLocaleString('es-AR')}`;
+// Importación de Avatars para selección rápida
+import user1 from '../image/profile/user-1.jpg';
+import user2 from '../image/profile/user-2.jpg';
+import user3 from '../image/profile/user-3.jpg';
+import user4 from '../image/profile/user-4.jpg';
+import user5 from '../image/profile/user-5.jpg';
+import user6 from '../image/profile/user-6.jpg';
+import user7 from '../image/profile/user-7.jpg';
+import user8 from '../image/profile/user-8.jpg';
+import user9 from '../image/profile/user-9.jpg';
+import user10 from '../image/profile/user-10.jpg';
+import user11 from '../image/profile/user-11.jpg';
+import user12 from '../image/profile/user-12.jpg';
 
-function assetUrl(path, config = {}) {
-  const raw = String(path || '').trim();
-  if (!raw) return '';
-  if (/^(https?:)?\/\//i.test(raw) || raw.startsWith('data:')) return raw;
-  const base = String(config?.public_api_url || UPLOADS_BASE_URL || '').replace(/\/$/, '');
-  return raw.startsWith('/') ? `${base}${raw}` : `${base}/${raw}`;
+const AVATARS = [user1, user2, user3, user4, user5, user6, user7, user8, user9, user10, user11, user12];
+
+const fmt = (value) => `$${Number(value || 0).toLocaleString('es-AR')}`;
+const emptyForm = { 
+  nombre: '', 
+  telefono: '', 
+  vehiculo: '', 
+  zona_preferida: '',
+  codigo_acceso: '',
+  direccion: '',
+  latitud_casa: null,
+  longitud_casa: null,
+  avatar_url: '',
+  notas: '',
+  fecha_ingreso: ''
+};
+
+const CONTROL = 'h-12 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm font-bold text-gray-700 outline-none transition focus:border-[#5D87FF] focus:ring-4 focus:ring-[#5D87FF]/10';
+
+const safeTime = (value) => { 
+  try { return value ? format(parseISO(value), 'HH:mm') : '--:--'; } 
+  catch { return '--:--'; } 
+};
+
+const normalizeText = (value) => String(value || '').trim().toLowerCase();
+
+function riderScore(repartidor, pedido, loads, lastMap) {
+  const targetZone = normalizeText(pedido?.delivery_zona || pedido?.cliente_direccion);
+  const preferredZone = normalizeText(repartidor?.zona_preferida);
+  return {
+    zoneMatch: Boolean(targetZone && preferredZone && (targetZone.includes(preferredZone) || preferredZone.includes(targetZone))),
+    load: Number(loads?.[repartidor.id] || 0),
+    lastAssignedAt: Number(lastMap?.[repartidor.id] || 0),
+    gpsAt: repartidor?.ultima_ubicacion_en ? new Date(repartidor.ultima_ubicacion_en).getTime() : 0,
+  };
 }
 
-function Badge({ estado }) {
-  const map = {
-    listo: 'bg-green-100 text-green-700',
-    en_camino: 'bg-purple-100 text-purple-700',
-    entregado: 'bg-gray-100 text-gray-500',
-  };
-  const labels = { listo: 'Listo para salir', en_camino: 'En camino', entregado: 'Entregado' };
+function riderBadges(repartidor, pedido, loads, lastMap) {
+  const score = riderScore(repartidor, pedido, loads, lastMap);
+  const badges = [];
+  if (score.zoneMatch) badges.push('Mejor zona');
+  if (score.load === 0) badges.push('Libre');
+  if (score.gpsAt) badges.push('GPS reciente');
+  return badges.slice(0, 2);
+}
+
+function AvatarDisplay({ url, nombre, size = 'h-24 w-24' }) {
+  if (url) {
+    return <img src={url} className={`${size} rounded-2xl object-cover shadow-lg`} alt={nombre} />;
+  }
   return (
-    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${map[estado] || 'bg-gray-100 text-gray-600'}`}>
-      {labels[estado] || estado}
-    </span>
+    <div className={`${size} rounded-2xl flex items-center justify-center font-black text-3xl text-white shadow-lg bg-gray-400`}>
+      {nombre?.[0]?.toUpperCase() || <User />}
+    </div>
   );
 }
 
-function etaLabel(pedido) {
-  const eta = Number(pedido?.eta_min_dinamico || pedido?.tiempo_estimado_min || 0);
-  if (!eta) return 'Sin ETA';
-  return `${eta} min`;
-}
+function DispatchCard({ pedido, assigningAuto, submittingActionId, onAutoAssign, onPick, onDispatch, onDeliver }) {
+  return (
+    <div className="rounded-[24px] border border-white/80 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Pedido</p>
+          <p className="mt-1 text-lg font-black text-slate-900">#{pedido.numero}</p>
+        </div>
+        <div className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${pedido.estado === 'en_camino' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+          {pedido.estado === 'en_camino' ? 'En viaje' : 'Listo'}
+        </div>
+      </div>
 
-function etaSourceLabel(pedido) {
-  const source = String(pedido?.eta_origen || '');
-  if (source === 'rider_route') return 'ETA por ubicacion';
-  if (source === 'rider_route_stale') return 'ETA por ultima ubicacion';
-  if (source === 'estado') return 'ETA por estado';
-  return 'ETA estimado';
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-black uppercase tracking-tight text-slate-900">{pedido.cliente_nombre || 'Cliente sin nombre'}</p>
+          <div className="mt-1 flex items-start gap-2 text-xs font-semibold text-slate-500">
+            <MapPinned size={13} className="mt-0.5 flex-shrink-0" />
+            <span>{pedido.cliente_direccion || 'Sin direccion cargada'}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 text-xs font-semibold text-slate-500">
+          <div className="flex items-center gap-2"><Clock3 size={13} /><span>{safeTime(pedido.creado_en)} hs</span></div>
+          <div className="font-black text-slate-900">{fmt(pedido.total)}</div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          {pedido.estado === 'listo' && !pedido.repartidor_id ? (
+            <>
+              <button onClick={() => onAutoAssign(pedido.id)} disabled={assigningAuto} className="h-11 rounded-2xl bg-[#5D87FF] px-5 text-[11px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100 disabled:opacity-50 hover:bg-[#4570EA] transition-all">
+                {assigningAuto ? '...' : 'Auto'}
+              </button>
+              <button onClick={() => onPick(pedido)} className="h-11 rounded-2xl border border-slate-200 bg-white px-5 text-[11px] font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50 transition-all">
+                Elegir
+              </button>
+            </>
+          ) : null}
+          {pedido.estado === 'listo' && pedido.repartidor_id ? (
+            <button onClick={() => onDispatch(pedido.id)} disabled={submittingActionId === pedido.id} className="h-11 rounded-2xl bg-[#5D87FF] px-5 text-[11px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-100 disabled:opacity-50 hover:bg-[#4570EA] transition-all">
+              {submittingActionId === pedido.id ? '...' : 'Despachar'}
+            </button>
+          ) : null}
+          {pedido.estado === 'en_camino' ? (
+            <button onClick={() => onDeliver(pedido)} disabled={submittingActionId === pedido.id} className="h-11 rounded-2xl bg-[#13DEB9] px-5 text-[11px] font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-100 disabled:opacity-50 hover:bg-[#0EB795] transition-all">
+              {submittingActionId === pedido.id ? '...' : 'Entregar'}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Delivery() {
   const { hasPermission } = useAuth();
+  const canManage = hasPermission('delivery.manage');
   const [repartidores, setRepartidores] = useState([]);
   const [pedidos, setPedidos] = useState([]);
   const [tab, setTab] = useState('activos');
   const [modal, setModal] = useState(null);
   const [asignarModal, setAsignarModal] = useState(null);
-  const [form, setForm] = useState({ nombre: '', telefono: '', vehiculo: '', zona_preferida: '' });
-  const [loading, setLoading] = useState(false);
-  const [locatingId, setLocatingId] = useState(null);
+  const [detailModal, setDetailModal] = useState(null);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [savingRider, setSavingRider] = useState(false);
   const [assigningAuto, setAssigningAuto] = useState(false);
-  const configRef = useRef({});
-  const canManage = hasPermission('delivery.manage');
-  const repartidoresDisponibles = repartidores.filter(r => r.activo && r.disponible);
+  const [assigningManualId, setAssigningManualId] = useState(null);
+  const [submittingActionId, setSubmittingActionId] = useState(null);
+  const fileInputRef = useRef(null);
 
   const cargar = async () => {
-    const [reps, peds] = await Promise.all([
-      api.get('/repartidores'),
-      api.get('/pedidos?limit=100')
-    ]);
-    setRepartidores(reps);
-    setPedidos(peds);
+    try {
+      const [reps, peds] = await Promise.all([api.get('/repartidores'), api.get('/pedidos?limit=100')]);
+      setRepartidores(reps || []);
+      setPedidos(peds || []);
+    } catch {
+      toast.error('No se pudo cargar el panel de delivery');
+    }
   };
 
-  useEffect(() => {
-    api.get('/configuracion').then((data) => {
-      configRef.current = data;
-    }).catch(() => {});
+  useAuthenticatedSocket({ nuevo_pedido: cargar, pedido_actualizado_admin: cargar, repartidor_ubicacion_admin: cargar });
+  useEffect(() => { cargar(); }, []);
 
-    cargar();
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
-    socket.on('nuevo_pedido', () => cargar());
-    socket.on('pedido_actualizado', () => cargar());
-    socket.on('repartidor_ubicacion', (rep) => {
-      setRepartidores(prev => prev.map(item => item.id === rep.id ? rep : item));
+  const repartidoresActivos = useMemo(() => repartidores.filter((item) => item.activo), [repartidores]);
+  const repartidoresDisponibles = useMemo(() => repartidoresActivos.filter((item) => item.disponible), [repartidoresActivos]);
+  const pedidosDelivery = useMemo(() => pedidos.filter((pedido) => pedido.tipo_entrega === 'delivery'), [pedidos]);
+  const activos = useMemo(() => pedidosDelivery.filter((pedido) => ['listo', 'en_camino'].includes(pedido.estado)), [pedidosDelivery]);
+  const listosSinAsignar = useMemo(() => activos.filter((pedido) => pedido.estado === 'listo' && !pedido.repartidor_id), [activos]);
+  const listosAsignados = useMemo(() => activos.filter((pedido) => pedido.estado === 'listo' && pedido.repartidor_id), [activos]);
+  const enCamino = useMemo(() => activos.filter((pedido) => pedido.estado === 'en_camino'), [activos]);
+  const historial = useMemo(() => pedidosDelivery.filter((pedido) => pedido.estado === 'entregado').slice(0, 20), [pedidosDelivery]);
+
+  const riderLoads = useMemo(() => pedidosDelivery.reduce((acc, pedido) => {
+    if (!pedido.repartidor_id || !['listo', 'en_camino'].includes(pedido.estado)) return acc;
+    acc[pedido.repartidor_id] = (acc[pedido.repartidor_id] || 0) + 1;
+    return acc;
+  }, {}), [pedidosDelivery]);
+
+  const lastAssignmentByRider = useMemo(() => pedidosDelivery.reduce((acc, pedido) => {
+    if (!pedido.repartidor_id) return acc;
+    const timestamp = new Date(pedido.actualizado_en || pedido.creado_en || 0).getTime() || 0;
+    acc[pedido.repartidor_id] = Math.max(acc[pedido.repartidor_id] || 0, timestamp);
+    return acc;
+  }, {}), [pedidosDelivery]);
+
+  const repartidoresSugeridos = useMemo(() => {
+    if (!asignarModal) return repartidoresDisponibles;
+    return [...repartidoresDisponibles].sort((a, b) => {
+      const scoreA = riderScore(a, asignarModal, riderLoads, lastAssignmentByRider);
+      const scoreB = riderScore(b, asignarModal, riderLoads, lastAssignmentByRider);
+      if (scoreA.zoneMatch !== scoreB.zoneMatch) return scoreA.zoneMatch ? -1 : 1;
+      if (scoreA.load !== scoreB.load) return scoreA.load - scoreB.load;
+      if (scoreA.lastAssignedAt !== scoreB.lastAssignedAt) return scoreA.lastAssignedAt - scoreB.lastAssignedAt;
+      if (scoreA.gpsAt !== scoreB.gpsAt) return scoreB.gpsAt - scoreA.gpsAt;
+      return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es');
     });
-    return () => socket.disconnect();
-  }, []);
+  }, [asignarModal, repartidoresDisponibles, riderLoads, lastAssignmentByRider]);
 
-  const pedidosDelivery = pedidos.filter(p => p.tipo_entrega === 'delivery');
-  const activos = pedidosDelivery.filter(p => ['listo', 'en_camino'].includes(p.estado));
-  const historial = pedidosDelivery.filter(p => p.estado === 'entregado').slice(0, 30);
-
-  const guardarRepartidor = async () => {
-    if (!form.nombre) return toast.error('Nombre requerido');
-    setLoading(true);
+  const guardarRider = async () => {
+    if (!form.nombre.trim()) return toast.error('Ingresa el nombre del repartidor');
+    setSavingRider(true);
     try {
-      if (modal === 'nuevo') {
-        await api.post('/repartidores', form);
-        toast.success('Repartidor creado');
+      if (modal?.mode === 'edit') {
+        await api.put(`/repartidores/${modal.repartidor.id}`, form);
       } else {
-        await api.put(`/repartidores/${modal.id}`, { ...modal, ...form });
-        toast.success('Repartidor actualizado');
+        await api.post('/repartidores', form);
       }
+      toast.success('Rider guardado');
       setModal(null);
-      cargar();
-    } catch { toast.error('Error al guardar'); }
-    finally { setLoading(false); }
+      setForm(emptyForm);
+      await cargar();
+    } catch (error) {
+      toast.error(error?.error || 'No se pudo guardar el rider');
+    } finally {
+      setSavingRider(false);
+    }
   };
 
-  const eliminarRepartidor = async (id) => {
-    if (!confirm('¿Eliminar repartidor?')) return;
-    await api.delete(`/repartidores/${id}`);
-    toast.success('Eliminado');
-    cargar();
-  };
-
-  const toggleDisponible = async (rep) => {
-    await api.put(`/repartidores/${rep.id}`, { ...rep, disponible: rep.disponible ? 0 : 1 });
-    cargar();
-  };
-
-  const asignar = async (repartidorId) => {
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('imagen', file);
     try {
-      await api.post(`/repartidores/${repartidorId}/asignar/${asignarModal.id}`);
-      toast.success('Repartidor asignado - pedido en camino');
-      setAsignarModal(null);
-      cargar();
-    } catch { toast.error('Error al asignar'); }
+      const res = await api.post('/productos/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setForm({ ...form, avatar_url: res.url });
+      toast.success('Imagen cargada');
+    } catch {
+      toast.error('Error al subir imagen');
+    }
   };
 
-  const autoAsignar = async (pedidoId = asignarModal?.id) => {
-    if (!pedidoId) return;
+  const eliminarRider = async (repartidor) => {
+    if (!window.confirm(`¿Eliminar a ${repartidor.nombre}?`)) return;
+    try {
+      await api.delete(`/repartidores/${repartidor.id}`);
+      toast.success('Rider eliminado');
+      await cargar();
+    } catch (error) {
+      toast.error(error?.error || 'No se pudo eliminar el rider');
+    }
+  };
+
+  const toggleDisponible = async (repartidor) => {
+    try {
+      await api.put(`/repartidores/${repartidor.id}`, { ...repartidor, disponible: repartidor.disponible ? 0 : 1 });
+      await cargar();
+    } catch {
+      toast.error('No se pudo cambiar la disponibilidad');
+    }
+  };
+
+  const autoAsignar = async (pedidoId) => {
     setAssigningAuto(true);
     try {
-      const response = await api.post(`/repartidores/auto-asignar/${pedidoId}`);
-      const nombre = response?.repartidor?.nombre ? ` a ${response.repartidor.nombre}` : '';
-      toast.success(`Pedido autoasignado${nombre}`);
+      await api.post(`/repartidores/auto-asignar/${pedidoId}`);
+      toast.success('Pedido asignado');
       setAsignarModal(null);
-      cargar();
+      await cargar();
     } catch (error) {
-      toast.error(error?.error || 'No se pudo autoasignar el pedido');
+      toast.error(error?.error || 'No hay riders disponibles');
     } finally {
       setAssigningAuto(false);
     }
   };
 
-  const marcarEntregado = async (pedidoId) => {
+  const asignarManual = async (repartidorId, pedidoId) => {
+    setAssigningManualId(repartidorId);
     try {
-      const updated = await api.put(`/pedidos/${pedidoId}/estado`, { estado: 'entregado' });
-      if (
-        configRef.current.whatsapp_notificaciones_auto === '1' &&
-        configRef.current.whatsapp_modo_envio !== 'api' &&
-        updated?.cliente_telefono
-      ) {
-        try {
-          const notification = await api.get(`/pedidos/${updated.id}/notificacion/entregado?base_url=${encodeURIComponent(window.location.origin)}`);
-          const popup = window.open(notification.url, '_blank', 'noopener,noreferrer');
-          if (!popup) {
-            toast.error('Permiti ventanas emergentes para abrir WhatsApp');
-          }
-        } catch {
-          toast.error('No se pudo preparar el mensaje postventa');
-        }
-      }
-      toast.success('Pedido marcado como entregado');
-      cargar();
-    } catch { toast.error('Error'); }
-  };
-
-  const abrirModal = (rep = null) => {
-    setForm(rep ? { nombre: rep.nombre, telefono: rep.telefono, vehiculo: rep.vehiculo, zona_preferida: rep.zona_preferida || '' } : { nombre: '', telefono: '', vehiculo: '', zona_preferida: '' });
-    setModal(rep || 'nuevo');
-  };
-
-  const actualizarUbicacion = async (rep) => {
-    if (!navigator.geolocation) {
-      toast.error('Este dispositivo no permite geolocalizacion');
-      return;
-    }
-
-    setLocatingId(rep.id);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const updated = await api.put(`/repartidores/${rep.id}/ubicacion`, {
-            latitud: position.coords.latitude,
-            longitud: position.coords.longitude,
-          });
-          setRepartidores(prev => prev.map(item => item.id === rep.id ? updated : item));
-          toast.success(`Ubicacion actualizada para ${rep.nombre}`);
-        } catch {
-          toast.error('No se pudo guardar la ubicacion');
-        } finally {
-          setLocatingId(null);
-        }
-      },
-      () => {
-        setLocatingId(null);
-        toast.error('No pudimos obtener la ubicacion');
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  };
-
-  const quitarUbicacion = async (rep) => {
-    try {
-      const updated = await api.delete(`/repartidores/${rep.id}/ubicacion`);
-      setRepartidores(prev => prev.map(item => item.id === rep.id ? updated : item));
-      toast.success('Ubicacion eliminada');
-    } catch {
-      toast.error('No se pudo borrar la ubicacion');
+      await api.post(`/repartidores/${repartidorId}/asignar/${pedidoId}`);
+      toast.success('Rider asignado');
+      setAsignarModal(null);
+      await cargar();
+    } catch (error) {
+      toast.error(error?.error || 'No se pudo asignar el rider');
+    } finally {
+      setAssigningManualId(null);
     }
   };
 
-  const riderLink = (rep) => `${window.location.origin}/rider/${rep.id}/${rep.codigo_acceso}`;
-
-  const copiarRiderLink = async (rep) => {
+  const marcarEnCamino = async (pedidoId) => {
+    setSubmittingActionId(pedidoId);
     try {
-      await navigator.clipboard.writeText(riderLink(rep));
-      toast.success(`Link rider copiado para ${rep.nombre}`);
-    } catch {
-      toast.error('No se pudo copiar el link');
+      await api.put(`/pedidos/${pedidoId}/estado`, { estado: 'en_camino' });
+      toast.success('Pedido despachado');
+      await cargar();
+    } catch (error) {
+      toast.error(error?.error || 'No se pudo despachar el pedido');
+    } finally {
+      setSubmittingActionId(null);
     }
   };
+
+  const marcarEntregado = async (pedido) => {
+    const payload = { estado: 'entregado' };
+    if (pedido.entrega_pin) {
+      const pin = window.prompt(`Ingresa el PIN de entrega del pedido #${pedido.numero}`);
+      if (pin === null) return;
+      payload.pin = pin;
+    }
+    setSubmittingActionId(pedido.id);
+    try {
+      await api.put(`/pedidos/${pedido.id}/estado`, payload);
+      toast.success('Pedido entregado');
+      await cargar();
+    } catch (error) {
+      toast.error(error?.error || 'No se pudo cerrar la entrega');
+    } finally {
+      setSubmittingActionId(null);
+    }
+  };
+
+  const columns = [
+    { key: 'sin_asignar', title: 'Listos sin rider', subtitle: 'Esperando asignación', items: listosSinAsignar, shell: 'border-rose-100 bg-rose-50/40', badge: 'bg-rose-100 text-rose-700', empty: 'No hay pedidos listos sin asignar.' },
+    { key: 'asignados', title: 'Listos para despachar', subtitle: 'Reservados para salida', items: listosAsignados, shell: 'border-blue-100 bg-blue-50/30', badge: 'bg-blue-100 text-blue-700', empty: 'No hay pedidos listos con rider asignado.' },
+    { key: 'en_camino', title: 'En camino', subtitle: 'Pedidos en viaje', items: enCamino, shell: 'border-emerald-100 bg-emerald-50/30', badge: 'bg-emerald-100 text-emerald-700', empty: 'No hay pedidos en camino ahora mismo.' },
+  ];
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Delivery</h1>
-          <p className="text-sm text-gray-500">{activos.length} entregas activas - {repartidoresDisponibles.length} repartidores disponibles</p>
+    <div className="min-h-screen bg-[#F4F7FB] px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-8 pb-12">
+        
+        {/* Header Seccion */}
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-3"><div className="h-8 w-1 rounded-full bg-[#5D87FF]"></div><p className="text-sm font-black uppercase tracking-[0.3em] text-[#5D87FF]">Logística de reparto</p></div>
+            <h1 className="text-3xl font-black tracking-tight text-gray-900 uppercase leading-none">Centro de Delivery</h1>
+            <p className="mt-2 font-medium text-gray-500">{activos.length} envíos activos ahora mismo.</p>
+          </div>
+          <div className="flex gap-3">
+            {canManage ? <button onClick={() => { setForm(emptyForm); setModal({ mode: 'create' }); }} className="flex h-12 items-center gap-2 rounded-2xl bg-[#5D87FF] px-6 text-sm font-black text-white shadow-lg shadow-blue-100 hover:bg-[#4570EA] active:scale-95 transition-all">
+              <UserPlus size={18} strokeWidth={3} />NUEVO RIDER
+            </button> : null}
+            <button onClick={cargar} className="flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-100 bg-white text-gray-400 shadow-sm active:scale-90 transition-all"><RefreshCw size={18} /></button>
+          </div>
         </div>
-        <button onClick={cargar} className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors">
-          <RefreshCw size={16} />
-        </button>
-      </div>
 
-      {/* Repartidores */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-gray-900">Repartidores</h2>
-          {canManage ? (
-            <button onClick={() => abrirModal()} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-xl text-sm font-semibold transition-colors">
-              <Plus size={15} /> Agregar
-            </button>
-          ) : null}
+        {/* Metricas Rapidas */}
+        <div className="grid gap-4 md:grid-cols-3 lg:gap-6">
+          <div className="rounded-[32px] border border-rose-100 bg-white p-6 shadow-sm"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500 mb-1">Sin rider</p><p className="text-3xl font-black text-gray-900">{listosSinAsignar.length}</p></div>
+          <div className="rounded-[32px] border border-blue-100 bg-white p-6 shadow-sm"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#5D87FF] mb-1">Listos</p><p className="text-3xl font-black text-gray-900">{listosAsignados.length}</p></div>
+          <div className="rounded-[32px] border border-emerald-100 bg-white p-6 shadow-sm"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 mb-1">En viaje</p><p className="text-3xl font-black text-gray-900">{enCamino.length}</p></div>
         </div>
-        {repartidores.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-4">Sin repartidores. Agrega el primero.</p>
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {repartidores.filter(r => r.activo).map(rep => (
-              <div key={rep.id} className={`border-2 rounded-xl p-4 transition-colors ${rep.disponible ? 'border-green-200 bg-green-50' : 'border-orange-200 bg-orange-50'}`}>
-                <div className="flex items-start justify-between mb-2">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${rep.disponible ? 'bg-green-200 text-green-700' : 'bg-orange-200 text-orange-700'}`}>
-                    {rep.nombre[0].toUpperCase()}
-                  </div>
-                  {canManage ? (
-                    <div className="flex gap-1">
-                      <button onClick={() => abrirModal(rep)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-white rounded-lg transition-colors"><Pencil size={13} /></button>
-                      <button onClick={() => eliminarRepartidor(rep.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors"><Trash2 size={13} /></button>
-                    </div>
-                  ) : null}
+
+        {/* Flota de Riders */}
+        <div className="rounded-[40px] border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="mb-8 flex items-center justify-between">
+            <h3 className="text-xl font-black uppercase tracking-tight text-gray-900">Nuestra Flota</h3>
+            <div className="rounded-xl bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase text-emerald-600">{repartidoresDisponibles.length} activos ahora</div>
+          </div>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {repartidoresActivos.map((repartidor) => (
+              <div key={repartidor.id} className="group relative rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 text-center">
+                <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                  <button onClick={() => { setForm({ ...repartidor }); setModal({ mode: 'edit', repartidor }); }} className="p-2 bg-blue-50 text-[#5D87FF] rounded-xl hover:bg-[#5D87FF] hover:text-white transition-colors"><Pencil size={14} /></button>
+                  <button onClick={() => eliminarRider(repartidor)} className="p-2 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors"><Trash2 size={14} /></button>
                 </div>
-                <p className="font-semibold text-gray-900 text-sm">{rep.nombre}</p>
-                {rep.vehiculo && <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Bike size={11} /> {rep.vehiculo}</p>}
-                {rep.telefono && <p className="text-xs text-gray-500 flex items-center gap-1"><Phone size={11} /> {rep.telefono}</p>}
-                {rep.zona_preferida && <p className="text-xs text-gray-500 flex items-center gap-1"><MapPin size={11} /> Zona preferida: {rep.zona_preferida}</p>}
-                {rep.latitud && rep.longitud && (
-                  <div className="mt-2 rounded-lg bg-white/80 px-2 py-2 text-[11px] text-gray-500">
-                    <p className="font-semibold text-gray-700">Ubicacion disponible</p>
-                    {rep.ultima_ubicacion_en && <p className="mt-0.5">Actualizada {format(parseISO(rep.ultima_ubicacion_en), 'HH:mm', { locale: es })}</p>}
+
+                <div className="mx-auto w-24 h-24 mb-4 relative">
+                  <div className="w-full h-full rounded-[28px] overflow-hidden border-4 border-white shadow-lg relative z-10">
+                    <AvatarDisplay url={repartidor.avatar_url} nombre={repartidor.nombre} size="w-full h-full" />
                   </div>
-                )}
-                {canManage ? (
-                  <button onClick={() => toggleDisponible(rep)} className={`mt-3 w-full py-1.5 rounded-lg text-xs font-semibold transition-colors ${rep.disponible ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'}`}>
-                    {rep.disponible ? 'Disponible' : 'En reparto'}
+                  <div className={`absolute -bottom-1 -right-1 h-6 w-6 rounded-lg border-2 border-white shadow-sm z-20 ${repartidor.disponible ? 'bg-emerald-500' : 'bg-[#5D87FF]'}`}></div>
+                </div>
+
+                <div className="mb-6">
+                  <h4 className="font-black text-gray-900 uppercase tracking-tight text-lg truncate">{repartidor.nombre}</h4>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center justify-center gap-1"><Bike size={12} /> {repartidor.vehiculo || 'Sin vehículo'}</p>
+                </div>
+
+                {/* Credenciales */}
+                <div className="mb-6 flex items-center gap-2 p-2.5 rounded-2xl bg-gray-50 border border-gray-100/50">
+                  <div className="flex-1 text-left pl-2">
+                    <p className="text-[8px] font-black text-gray-400 uppercase leading-none">ID</p>
+                    <p className="text-sm font-black text-[#5D87FF] mt-0.5">#{repartidor.id}</p>
+                  </div>
+                  <div className="w-[1px] h-6 bg-gray-200"></div>
+                  <div className="flex-1 text-right pr-2">
+                    <p className="text-[8px] font-black text-gray-400 uppercase leading-none">PIN</p>
+                    <p className="text-xs font-mono font-bold text-gray-800 mt-0.5 select-all">{repartidor.codigo_acceso}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => toggleDisponible(repartidor)} className={`h-11 rounded-2xl text-[10px] font-black uppercase transition-all ${repartidor.disponible ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'border-2 border-gray-100 text-gray-400'}`}>
+                    {repartidor.disponible ? 'DISPONIBLE' : 'OCUPADO'}
                   </button>
-                ) : null}
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {canManage ? (
-                    <button
-                      onClick={() => actualizarUbicacion(rep)}
-                      disabled={locatingId === rep.id}
-                      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      {locatingId === rep.id ? 'Ubicando...' : 'Mi ubicacion'}
-                    </button>
-                  ) : null}
-                  {rep.latitud && rep.longitud ? (
-                    canManage ? (
-                      <button
-                        onClick={() => quitarUbicacion(rep)}
-                        className="rounded-lg border border-red-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50"
-                      >
-                        Borrar
-                      </button>
-                    ) : (
-                      <a
-                        href={`https://www.google.com/maps?q=${rep.latitud},${rep.longitud}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-                      >
-                        Ver mapa
-                      </a>
-                    )
-                  ) : (
-                    <a
-                      href={`https://wa.me/${(rep.telefono || '').replace(/\D/g,'')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-                    >
-                      Contacto
-                    </a>
-                  )}
+                  <button onClick={() => setDetailModal(repartidor)} className="h-11 rounded-2xl bg-gray-900 text-white flex items-center justify-center shadow-lg active:scale-90 transition-all">
+                    <Smartphone size={18} />
+                  </button>
                 </div>
-                {canManage ? (
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => window.open(riderLink(rep), '_blank')}
-                      className="rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-50"
-                    >
-                      Modo rider
-                    </button>
-                    <button
-                      onClick={() => copiarRiderLink(rep)}
-                      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-                    >
-                      Copiar link
-                    </button>
-                  </div>
-                ) : null}
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {[{v:'activos',l:'Entregas activas'},{v:'historial',l:'Historial'}].map(({v,l}) => (
-          <button key={v} onClick={() => setTab(v)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-            {l} {v === 'activos' && activos.length > 0 && <span className="ml-1 bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full">{activos.length}</span>}
-          </button>
-        ))}
-      </div>
+        {/* Mesa de Despacho */}
+        <div className="rounded-[40px] border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div><h3 className="text-xl font-black uppercase tracking-tight text-gray-900 leading-none">Mesa de Despacho</h3><p className="mt-2 text-sm font-medium text-gray-500">Organiza las salidas del local.</p></div>
+            <div className="flex w-fit rounded-2xl bg-gray-100 p-1">
+              <button onClick={() => setTab('activos')} className={`rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${tab === 'activos' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>Activos ({activos.length})</button>
+              <button onClick={() => setTab('historial')} className={`rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-widest transition-all ${tab === 'historial' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>Historial</button>
+            </div>
+          </div>
 
-      {/* Entregas activas */}
-      {tab === 'activos' && (
-        <div className="space-y-3">
-          {activos.length === 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center text-gray-400">
-              <Bike size={40} className="mx-auto mb-3 opacity-25" />
-              <p>No hay entregas activas ahora</p>
-              <p className="text-xs mt-1">Los pedidos delivery en estado "Listo" apareceran aqui</p>
+          {tab === 'activos' ? (
+            <div className="grid gap-6 xl:grid-cols-3">
+              {columns.map((column) => (
+                <div key={column.key} className={`rounded-[32px] border p-6 ${column.shell}`}>
+                  <div className="mb-6 flex items-center justify-between">
+                    <h4 className="text-lg font-black text-gray-900 uppercase tracking-tight">{column.title}</h4>
+                    <div className={`h-8 min-w-[32px] rounded-lg flex items-center justify-center font-black text-xs ${column.badge}`}>{column.items.length}</div>
+                  </div>
+                  <div className="space-y-4">
+                    {column.items.map((pedido) => (
+                      <DispatchCard key={pedido.id} pedido={pedido} assigningAuto={assigningAuto} submittingActionId={submittingActionId} onAutoAssign={autoAsignar} onPick={setAsignarModal} onDispatch={marcarEnCamino} onDeliver={marcarEntregado} />
+                    ))}
+                    {column.items.length === 0 && <div className="py-12 text-center opacity-30 italic text-sm">{column.empty}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-[32px] border border-gray-100">
+              <table className="w-full text-left text-sm font-bold">
+                <thead className="bg-gray-50 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400"><tr><th className="px-8 py-5">Orden</th><th className="px-8 py-5">Cliente</th><th className="px-8 py-5">Rider</th><th className="px-8 py-5 text-right">Total</th></tr></thead>
+                <tbody className="divide-y divide-gray-50">
+                  {historial.map((pedido) => <tr key={pedido.id} className="hover:bg-gray-50 transition-colors"><td className="px-8 py-5 text-gray-900">#{pedido.numero}</td><td className="px-8 py-5 uppercase tracking-tight text-xs">{pedido.cliente_nombre}</td><td className="px-8 py-5 text-gray-400 text-xs">{pedido.repartidor_nombre || '-'}</td><td className="px-8 py-5 text-right text-[#5D87FF]">{fmt(pedido.total)}</td></tr>)}
+                </tbody>
+              </table>
             </div>
           )}
-          {activos.map(p => {
-            const items = JSON.parse(p.items || '[]');
-            const repartidor = repartidores.find(r => r.id === p.repartidor_id);
-            return (
-              <div key={p.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="font-bold text-gray-900 text-lg">#{p.numero}</span>
-                      <Badge estado={p.estado} />
-                      {p.repartidor_nombre && (
-                        <span className="flex items-center gap-1 text-sm text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full">
-                          <UserCheck size={13} /> {p.repartidor_nombre}
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                      <div className="flex items-center gap-1.5 text-gray-700">
-                        <span className="font-medium">{p.cliente_nombre}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-gray-500">
-                        <Phone size={13} /> {p.cliente_telefono || '-'}
-                      </div>
-                      <div className="flex items-start gap-1.5 text-gray-500 col-span-2">
-                        <MapPin size={13} className="mt-0.5 flex-shrink-0" />
-                        <span>{p.cliente_direccion || '-'}</span>
-                      </div>
-                      <div className="text-xs text-gray-500">Zona: <span className="font-semibold text-gray-700">{p.delivery_zona || 'General'}</span></div>
-                      <div className="text-xs text-gray-500">ETA: <span className="font-semibold text-gray-700">{etaLabel(p)}</span> <span className="text-[11px] text-gray-400">({etaSourceLabel(p)})</span></div>
-                    </div>
-                    <div className="mt-2 text-xs text-gray-400">
-                      {items.map((i, idx) => <span key={idx}>{i.cantidad}x {i.nombre}{idx < items.length - 1 ? ' - ' : ''}</span>)}
-                    </div>
-                    {p.notas && <p className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-lg mt-2 italic">"{p.notas}"</p>}
-                    {repartidor?.latitud && repartidor?.longitud && (
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                          Ubicacion {repartidor.ultima_ubicacion_en ? format(parseISO(repartidor.ultima_ubicacion_en), 'HH:mm', { locale: es }) : 'reciente'}
-                        </span>
-                        {p.distancia_repartidor_km ? (
-                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
-                            A {p.distancia_repartidor_km} km
-                          </span>
-                        ) : null}
-                        {p.ubicacion_repartidor_atrasada ? (
-                          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 border border-amber-200">
-                            Ubicacion atrasada
-                          </span>
-                        ) : null}
-                        <a
-                          href={`https://www.google.com/maps?q=${repartidor.latitud},${repartidor.longitud}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 border border-gray-200 hover:bg-gray-50"
-                        >
-                          <ExternalLink size={12} />
-                          Ver mapa
-                        </a>
-                      </div>
-                    )}
-                    {p.entrega_foto ? (
-                      <div className="mt-3 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3">
-                        <img
-                          src={assetUrl(p.entrega_foto, configRef.current)}
-                          alt={`Entrega ${p.numero}`}
-                          className="h-16 w-16 rounded-xl object-cover border border-emerald-200 bg-white"
-                        />
-                        <a
-                          href={assetUrl(p.entrega_foto, configRef.current)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700"
-                        >
-                          <CheckCircle size={12} />
-                          Ver foto de entrega
-                        </a>
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-bold text-orange-600 text-lg">{fmt(p.total)}</p>
-                    <p className="text-xs text-gray-400 capitalize">{p.metodo_pago}</p>
-                    <p className="text-xs text-gray-400">{format(parseISO(p.creado_en), 'HH:mm', { locale: es })}</p>
-                  </div>
+        </div>
+      </div>
+
+      {/* ── MODAL FICHA REPARTIDOR (CREATE/EDIT) ── */}
+      {modal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-gray-900/60 p-4 backdrop-blur-md" onClick={() => setModal(null)}>
+          <div className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-[40px] bg-white shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            {/* Header del Modal */}
+            <div className="shrink-0 p-8 pb-4 flex items-center justify-between border-b border-gray-50">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-6 w-1 bg-[#5D87FF] rounded-full"></div>
+                  <p className="text-xs font-black text-[#5D87FF] uppercase tracking-[0.2em]">{modal.mode === 'edit' ? 'Actualizar Ficha' : 'Nuevo Repartidor'}</p>
                 </div>
-                <div className="flex gap-2 mt-4 pt-4 border-t border-gray-50">
-                  {p.estado === 'listo' && canManage && (
-                    <>
-                      {repartidoresDisponibles.length > 0 && (
-                        <button
-                          onClick={() => autoAsignar(p.id)}
-                          disabled={assigningAuto}
-                          className="flex-1 flex items-center justify-center gap-2 bg-purple-500 hover:bg-purple-600 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
-                        >
-                          <Bike size={15} />
-                          {assigningAuto ? 'Autoasignando...' : (repartidoresDisponibles.length === 1 ? 'Autoasignar' : 'Autoasignar mejor')}
-                        </button>
-                      )}
-                      <button onClick={() => setAsignarModal(p)}
-                        className="flex-1 flex items-center justify-center gap-2 border border-purple-200 text-purple-700 hover:bg-purple-50 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-                        <Bike size={15} /> Elegir repartidor
-                      </button>
-                    </>
-                  )}
-                  {p.estado === 'en_camino' && canManage && (
-                    <>
-                      {repartidor && (
-                        <button
-                          onClick={() => actualizarUbicacion(repartidor)}
-                          disabled={locatingId === repartidor.id}
-                          className="flex items-center justify-center gap-2 border border-blue-200 text-blue-700 hover:bg-blue-50 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
-                        >
-                          <Navigation size={15} />
-                          {locatingId === repartidor.id ? 'Ubicando...' : 'Actualizar ubicacion'}
-                        </button>
-                      )}
-                      {(p.entrega_pin || configRef.current.delivery_requiere_foto_entrega === '1') ? (
-                        <div className="flex-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800">
-                          Validar entrega desde rider {p.entrega_pin ? 'con PIN' : ''}{configRef.current.delivery_requiere_foto_entrega === '1' ? ' y foto' : ''}
-                        </div>
-                      ) : (
-                        <button onClick={() => marcarEntregado(p.id)}
-                          className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
-                          <CheckCircle size={15} /> Marcar entregado
-                        </button>
-                      )}
-                    </>
-                  )}
-                  {p.cliente_telefono && (
-                    <a href={`https://wa.me/${p.cliente_telefono.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-4 py-2.5 border border-green-200 text-green-600 hover:bg-green-50 rounded-xl text-sm font-medium transition-colors">
-                      <Phone size={14} /> WhatsApp
-                    </a>
-                  )}
+                <h3 className="text-2xl font-black text-gray-900 tracking-tight uppercase leading-none">Gestión de Personal Delivery</h3>
+              </div>
+              <button onClick={() => setModal(null)} className="rounded-full p-2 bg-gray-50 text-gray-400 hover:bg-gray-100 transition-all"><X size={24} /></button>
+            </div>
+
+            {/* Contenido con Scroll */}
+            <div className="flex-1 overflow-y-auto p-8 pt-6 space-y-10 no-scrollbar">
+              
+              {/* Bloque 1: Perfil y Foto */}
+              <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-10 items-start">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="relative group">
+                    <div className="h-44 w-44 rounded-[48px] overflow-hidden border-8 border-white shadow-2xl bg-gray-100 relative z-10">
+                      <AvatarDisplay url={form.avatar_url} nombre={form.nombre} size="w-full h-full" />
+                    </div>
+                    <button onClick={() => setAvatarPickerOpen(true)} className="absolute -bottom-2 -right-2 h-12 w-12 bg-[#5D87FF] text-white rounded-2xl border-4 border-white shadow-lg flex items-center justify-center hover:bg-[#4570EA] transition-all active:scale-90 z-20"><Camera size={24} /></button>
+                  </div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center px-4">Utiliza una foto clara para identificar al repartidor en la calle.</p>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="md:col-span-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nombre Completo</label>
+                      <input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})} className={CONTROL + " mt-1"} placeholder="Ej: Carlos Rodriguez" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">WhatsApp / Celular</label>
+                      <input value={form.telefono} onChange={e => setForm({...form, telefono: e.target.value})} className={CONTROL + " mt-1"} placeholder="3811234567" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Vehículo (Marca/Modelo)</label>
+                      <input value={form.vehiculo} onChange={e => setForm({...form, vehiculo: e.target.value})} className={CONTROL + " mt-1"} placeholder="Motomel Blitz 110" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">PIN de acceso del rider</label>
+                      <input value={form.codigo_acceso || ''} onChange={e => setForm({...form, codigo_acceso: e.target.value})} className={CONTROL + " mt-1 font-mono uppercase tracking-widest"} placeholder="Ej: 9235ce31" />
+                    </div>
+                  </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
 
-      {/* Historial */}
-      {tab === 'historial' && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">#</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Cliente</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Direccion</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Repartidor</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Entrega</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Hora</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {historial.map(p => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">#{p.numero}</td>
-                  <td className="px-4 py-3 text-gray-700">{p.cliente_nombre || '-'}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs max-w-36 truncate">{p.cliente_direccion || '-'}</td>
-                  <td className="px-4 py-3 text-gray-500">{p.repartidor_nombre || <span className="text-gray-300">-</span>}</td>
-                  <td className="px-4 py-3">
-                    {p.entrega_foto ? (
-                      <a href={assetUrl(p.entrega_foto, configRef.current)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700 hover:underline">
-                        <img src={assetUrl(p.entrega_foto, configRef.current)} alt={`Entrega ${p.numero}`} className="h-9 w-9 rounded-lg object-cover border border-emerald-200" />
-                        Foto
-                      </a>
-                    ) : p.entrega_pin ? (
-                      <span className="text-xs text-slate-500">PIN validado</span>
-                    ) : (
-                      <span className="text-xs text-gray-300">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{format(parseISO(p.creado_en), 'dd/MM HH:mm', { locale: es })}</td>
-                  <td className="px-4 py-3 font-bold text-gray-900 text-right">{fmt(p.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {historial.length === 0 && <p className="text-center text-gray-400 py-10">Sin historial</p>}
-        </div>
-      )}
-
-      {/* Modal Repartidor */}
-      {modal !== null && canManage && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setModal(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-bold text-lg">{modal === 'nuevo' ? 'Nuevo repartidor' : 'Editar repartidor'}</h2>
-              <button onClick={() => setModal(null)}><X size={20} className="text-gray-400" /></button>
-            </div>
-            <div className="space-y-3">
-              {[['nombre','Nombre *'],['telefono','Telefono / WhatsApp'],['vehiculo','Vehiculo (moto, auto, bici...)'],['zona_preferida','Zona preferida (ej: Monteros)']].map(([k,l]) => (
-                <div key={k}>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">{l}</label>
-                  <input value={form[k]} onChange={e => setForm({ ...form, [k]: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+              {/* Bloque 2: Residencia y Mapa */}
+              <div className="pt-8 border-t border-gray-100">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="h-8 w-8 rounded-xl bg-blue-50 flex items-center justify-center text-[#5D87FF]"><MapIcon size={18} strokeWidth={3} /></div>
+                  <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest leading-none">Información de Residencia</h4>
                 </div>
-              ))}
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                  <div className="space-y-6">
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Dirección de Domicilio</label>
+                      <div className="relative">
+                        <input value={form.direccion} onChange={e => setForm({...form, direccion: e.target.value})} className={CONTROL + " mt-1 pl-10"} placeholder="Ej: Calle San Martín 123, Monteros" />
+                        <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Zona Operativa</label>
+                        <input value={form.zona_preferida} onChange={e => setForm({...form, zona_preferida: e.target.value})} className={CONTROL + " mt-1"} placeholder="Ej: Centro / Sur" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Fecha de Ingreso</label>
+                        <input type="date" value={form.fecha_ingreso} onChange={e => setForm({...form, fecha_ingreso: e.target.value})} className={CONTROL + " mt-1"} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Vista de Ubicación</label>
+                    <div className="h-48 w-full rounded-[32px] overflow-hidden bg-gray-100 border-4 border-white shadow-inner relative group">
+                      {form.direccion ? (
+                        <>
+                          <iframe 
+                            width="100%" 
+                            height="100%" 
+                            frameBorder="0" 
+                            scrolling="no" 
+                            src={`https://maps.google.com/maps?q=${encodeURIComponent(form.direccion)}&t=&z=15&ie=UTF8&iwloc=&output=embed`} 
+                            className="grayscale group-hover:grayscale-0 transition-all duration-700 contrast-125 opacity-80 group-hover:opacity-100" 
+                          />
+                          <div className="absolute inset-0 pointer-events-none border-[12px] border-white/20 rounded-[32px]"></div>
+                        </>
+                      ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-gray-300 gap-2 p-8 text-center">
+                          <Globe size={32} strokeWidth={1} />
+                          <p className="text-[10px] font-black uppercase tracking-tighter">Escribe la dirección para cargar el mapa</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloque 3: Notas */}
+              <div className="pt-8 border-t border-gray-100 pb-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-8 w-8 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400"><FileText size={18} strokeWidth={3} /></div>
+                  <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest leading-none">Notas de Legajo y Observaciones</h4>
+                </div>
+                <textarea value={form.notas} onChange={e => setForm({...form, notas: e.target.value})} className={CONTROL + " h-32 py-4 resize-none no-scrollbar"} placeholder="Registra historial de seguros, licencia, o notas internas sobre el desempeño..." />
+              </div>
             </div>
-            <div className="flex gap-3 mt-5">
-              <button onClick={() => setModal(null)} className="flex-1 py-2.5 border rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={guardarRepartidor} disabled={loading} className="flex-1 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-                {loading ? 'Guardando...' : 'Guardar'}
+
+            {/* Footer Fijo */}
+            <div className="shrink-0 p-8 pt-4 border-t border-gray-50 flex gap-4 bg-gray-50/30">
+              <button onClick={() => setModal(null)} className="flex-1 h-16 rounded-2xl border-2 border-gray-200 text-sm font-black text-gray-500 uppercase tracking-widest hover:bg-white transition-all">CANCELAR</button>
+              <button onClick={guardarRider} disabled={savingRider} className="flex-[2] h-16 rounded-2xl bg-[#5D87FF] text-white text-lg font-black uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-[#4570EA] active:scale-95 transition-all">
+                {savingRider ? 'PROCESANDO...' : (modal.mode === 'edit' ? 'GUARDAR CAMBIOS' : 'CREAR REPARTIDOR')}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Asignar */}
-      {asignarModal && canManage && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setAsignarModal(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-bold text-lg">Asignar repartidor</h2>
-              <button onClick={() => setAsignarModal(null)}><X size={20} className="text-gray-400" /></button>
+      {/* ── MODAL DETALLE (VIEW MODE) ── */}
+      {detailModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm" onClick={() => setDetailModal(null)}>
+          <div className="w-full max-w-2xl rounded-[48px] bg-white overflow-hidden shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            <div className="h-40 bg-gray-900 relative">
+               <div className="absolute inset-0 bg-gradient-to-br from-[#5D87FF] to-indigo-900 opacity-90"></div>
+               <div className="absolute inset-0 flex items-center justify-center opacity-10"><Bike size={160} strokeWidth={1} className="text-white" /></div>
             </div>
-            <div className="bg-gray-50 rounded-xl p-3 mb-4 text-sm">
-              <p className="font-medium text-gray-900">Pedido #{asignarModal.numero}</p>
-              <p className="text-gray-500">{asignarModal.cliente_nombre} - {asignarModal.cliente_direccion}</p>
-              <p className="font-bold text-orange-600 mt-1">{fmt(asignarModal.total)}</p>
+            <div className="px-10 pb-10">
+              <div className="relative z-10 flex justify-between items-end -mt-16 mb-8">
+                <div className="h-32 w-32 rounded-[40px] border-8 border-white bg-gray-100 shadow-2xl overflow-hidden relative">
+                  <AvatarDisplay url={detailModal.avatar_url} nombre={detailModal.nombre} size="w-full h-full" />
+                </div>
+                <div className="flex gap-2 pb-2">
+                  <button onClick={() => window.open(`https://wa.me/${detailModal.telefono}`, '_blank')} className="h-14 w-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-emerald-500 shadow-sm hover:bg-emerald-50 active:scale-90 transition-all"><Phone size={24} fill="currentColor" /></button>
+                  <button onClick={() => window.open(`${window.location.origin}/rider/${detailModal.id}/${detailModal.codigo_acceso}`, '_blank')} className="h-14 px-8 rounded-2xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">ABRIR APP</button>
+                </div>
+              </div>
+
+              <div className="mb-10">
+                <h3 className="text-3xl font-black text-gray-900 uppercase tracking-tight leading-none">{detailModal.nombre}</h3>
+                <div className="flex flex-wrap items-center gap-4 mt-4 text-gray-400 font-bold text-xs uppercase tracking-widest">
+                  <span className="flex items-center gap-1.5"><Smartphone size={14} /> {detailModal.telefono}</span>
+                  <span className="flex items-center gap-1.5"><Bike size={14} /> {detailModal.vehiculo}</span>
+                  <span className="flex items-center gap-1.5"><Calendar size={14} /> Ingreso: {detailModal.fecha_ingreso || '2024'}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-10">
+                <div className="rounded-[32px] bg-blue-50 p-6 border border-blue-100/50 flex flex-col justify-between">
+                  <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-4 leading-none">Credenciales de Trabajo</p>
+                  <div className="flex items-center justify-between">
+                    <div><p className="text-[9px] font-black text-blue-300 uppercase mb-1">ID RIDER</p><p className="text-xl font-black text-blue-700">#{detailModal.id}</p></div>
+                    <div className="text-right"><p className="text-[9px] font-black text-blue-300 uppercase mb-1">CÓDIGO PIN</p><p className="text-xl font-mono font-black text-blue-700 uppercase tracking-widest">{detailModal.codigo_acceso}</p></div>
+                  </div>
+                </div>
+                
+                <div className="rounded-[32px] bg-white p-2 border border-gray-100 shadow-inner h-44 overflow-hidden relative group cursor-pointer" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(detailModal.direccion)}`, '_blank')}>
+                  <iframe width="100%" height="100%" frameBorder="0" scrolling="no" src={`https://maps.google.com/maps?q=${encodeURIComponent(detailModal.direccion)}&t=&z=15&ie=UTF8&iwloc=&output=embed`} className="grayscale group-hover:grayscale-0 transition-all duration-700" />
+                  <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg shadow-sm border border-gray-100">
+                    <p className="text-[9px] font-black text-gray-900 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={10} className="text-[#5D87FF]" /> Domicilio</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Resumen de Desempeño</h4>
+                  <span className="text-[10px] font-black text-[#5D87FF] uppercase tracking-widest hover:underline cursor-pointer">Ver Historial</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                   <div className="p-4 rounded-[24px] bg-gray-50 border border-gray-100 text-center"><p className="text-[9px] font-black text-gray-400 uppercase mb-1 leading-none">Entregas</p><p className="text-lg font-black text-gray-800">124</p></div>
+                   <div className="p-4 rounded-[24px] bg-gray-50 border border-gray-100 text-center"><p className="text-[9px] font-black text-gray-400 uppercase mb-1 leading-none">Rating</p><p className="text-lg font-black text-gray-800">4.8</p></div>
+                   <div className="p-4 rounded-[24px] bg-gray-50 border border-gray-100 text-center"><p className="text-[9px] font-black text-gray-400 uppercase mb-1 leading-none">Puntual</p><p className="text-lg font-black text-emerald-600">92%</p></div>
+                </div>
+              </div>
             </div>
-            {repartidoresDisponibles.length > 0 && (
-              <button
-                onClick={() => autoAsignar(asignarModal.id)}
-                disabled={assigningAuto}
-                className="mb-3 w-full rounded-xl bg-purple-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
-              >
-                {assigningAuto ? 'Autoasignando...' : repartidoresDisponibles.length === 1 ? 'Asignar automaticamente al unico disponible' : 'Autoasignar al mejor disponible'}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Selector de Avatar */}
+      {avatarPickerOpen && (
+        <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-gray-900/60 p-4 backdrop-blur-md">
+          <div className="w-full max-w-2xl rounded-[40px] bg-white p-10 shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between mb-8 shrink-0">
+              <div><div className="flex items-center gap-2 mb-1"><div className="h-6 w-1 bg-[#5D87FF] rounded-full"></div><p className="text-xs font-black text-[#5D87FF] uppercase tracking-[0.2em]">Identidad</p></div><h3 className="text-2xl font-black text-gray-900 tracking-tight uppercase leading-none">Personalizar Perfil</h3></div>
+              <button onClick={() => setAvatarPickerOpen(false)} className="rounded-full p-2 hover:bg-gray-100 text-gray-400 transition-all"><X size={24} /></button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 overflow-y-auto no-scrollbar pr-2 pb-4">
+              <button onClick={() => fileInputRef.current.click()} className="group aspect-square rounded-[32px] border-4 border-dashed border-gray-200 flex flex-col items-center justify-center gap-2 hover:border-[#5D87FF] hover:bg-blue-50 transition-all">
+                <div className="h-12 w-12 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-[#5D87FF] group-hover:text-white transition-all"><Camera size={24} /></div>
+                <span className="text-[10px] font-black uppercase text-gray-400 group-hover:text-[#5D87FF]">Subir Foto</span>
+                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
               </button>
-            )}
-            <div className="space-y-2">
-              {repartidoresDisponibles.map(rep => (
-                <button key={rep.id} onClick={() => asignar(rep.id)}
-                  className="w-full flex items-center gap-3 p-3 border-2 border-gray-200 hover:border-purple-400 hover:bg-purple-50 rounded-xl transition-colors text-left">
-                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-sm font-bold text-green-700">
-                    {rep.nombre[0].toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{rep.nombre}</p>
-                    <p className="text-xs text-gray-500">{rep.vehiculo || 'Sin vehiculo registrado'}</p>
-                  </div>
-                  <span className="ml-auto text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Disponible</span>
-                </button>
+              {AVATARS.map((av, idx) => (
+                <button key={idx} onClick={() => { setForm({ ...form, avatar_url: av }); setAvatarPickerOpen(false); }} className={`relative aspect-square rounded-[32px] overflow-hidden border-4 transition-all hover:scale-105 ${form.avatar_url === av ? 'border-[#5D87FF] shadow-lg' : 'border-transparent opacity-70 hover:opacity-100'}`}><img src={av} className="w-full h-full object-cover" alt={`avatar-${idx}`} />{form.avatar_url === av && <div className="absolute inset-0 bg-[#5D87FF]/20 flex items-center justify-center"><div className="bg-white rounded-full p-1 text-[#5D87FF] shadow-md"><Check size={16} strokeWidth={4} /></div></div>}</button>
               ))}
-              {repartidoresDisponibles.length === 0 && (
-                <p className="text-center text-gray-400 py-6 text-sm">No hay repartidores disponibles en este momento</p>
-              )}
             </div>
+            <div className="mt-8 flex justify-end shrink-0 pt-4 border-t border-gray-50"><button onClick={() => setAvatarPickerOpen(false)} className="h-14 px-10 rounded-2xl border border-gray-200 text-sm font-black text-gray-500 uppercase tracking-widest hover:bg-gray-50 active:scale-95 transition-all">Cerrar</button></div>
           </div>
         </div>
       )}

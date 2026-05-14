@@ -18,6 +18,8 @@ const ROLES = [
   { value: 'delivery', label: 'Delivery' },
 ];
 
+const CONTROL = 'h-11 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 outline-none transition-all focus:border-[#5D87FF] focus:ring-4 focus:ring-[#5D87FF]/10 hover:border-gray-300';
+
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -98,107 +100,125 @@ export default function Usuarios() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <div className="max-w-6xl mx-auto space-y-6 pb-12">
+      {/* Header Section */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-white p-6 rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-gray-100">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Usuarios y roles</h1>
-          <p className="text-sm text-gray-500">Controla accesos por perfil para caja, cocina, delivery y administracion.</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Usuarios y Accesos</h1>
+          <p className="text-sm font-medium text-gray-500">Controla accesos por perfil para caja, cocina, delivery y administración.</p>
         </div>
         <button
           onClick={abrirNuevo}
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+          className="flex h-11 items-center gap-2 rounded-xl bg-[#5D87FF] text-white px-5 text-sm font-bold shadow-lg shadow-[#5D87FF]/20 hover:bg-[#4570EA] transition-all"
         >
-          <Plus size={15} />
-          Nuevo usuario
+          <Plus size={18} strokeWidth={2.5} />
+          Nuevo Usuario
         </button>
       </div>
 
-      <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-        {loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="h-20 animate-pulse rounded-2xl bg-gray-100" />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {usuarios.map((usuario) => (
-              <div key={usuario.id} className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
-                    <UserCog size={18} />
+      {/* Main Content */}
+      <div className="rounded-xl bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-50 bg-gray-50/30">
+          <h3 className="text-lg font-bold text-gray-900">Listado de Usuarios</h3>
+        </div>
+        
+        <div className="p-6">
+          {loading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="h-20 animate-pulse rounded-xl bg-gray-50 border border-gray-100" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {usuarios.map((usuario) => (
+                <div key={usuario.id} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-white hover:border-[#5D87FF]/30 hover:shadow-md transition-all group">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#ECF2FF] text-[#5D87FF]">
+                      <UserCog size={22} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate">{usuario.nombre}</p>
+                      <p className="text-xs font-semibold text-gray-400 truncate">{usuario.email}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{usuario.nombre}</p>
-                    <p className="text-xs text-gray-500">{usuario.email}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-gray-100 text-[10px] font-bold text-gray-600 uppercase tracking-wider">{usuario.rol}</span>
+                      <span className={`text-[10px] font-bold ${usuario.activo ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        {usuario.activo ? '● ACTIVO' : '○ INACTIVO'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => abrirEditar(usuario)}
+                      className="h-9 w-9 flex items-center justify-center rounded-lg bg-gray-50 text-gray-400 hover:bg-[#ECF2FF] hover:text-[#5D87FF] transition-all"
+                    >
+                      <Pencil size={16} />
+                    </button>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold capitalize text-gray-700">{usuario.rol}</span>
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${usuario.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                    {usuario.activo ? 'Activo' : 'Inactivo'}
-                  </span>
-                  <button
-                    onClick={() => abrirEditar(usuario)}
-                    className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-                  >
-                    <Pencil size={13} />
-                    Editar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+              {usuarios.length === 0 && <div className="md:col-span-2 py-12 text-center text-gray-400 italic">No se encontraron usuarios registrados.</div>}
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Modal Form */}
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={() => setModal(null)}>
-          <div className="w-full max-w-2xl rounded-3xl border border-white/70 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#2A3547]/40 p-4 backdrop-blur-sm" onClick={() => setModal(null)}>
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-100 p-6">
               <div className="flex items-center gap-2">
-                <ShieldCheck size={18} className="text-orange-600" />
-                <h2 className="text-lg font-bold text-gray-900">{modal === 'nuevo' ? 'Nuevo usuario' : 'Editar usuario'}</h2>
+                <div className="h-8 w-8 rounded-lg bg-[#ECF2FF] flex items-center justify-center text-[#5D87FF]">
+                  <ShieldCheck size={20} />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">{modal === 'nuevo' ? 'Crear Nuevo Usuario' : 'Editar Usuario'}</h2>
               </div>
-              <button onClick={() => setModal(null)} className="rounded-xl border border-gray-200 p-2 text-gray-500 transition-colors hover:bg-gray-50">
-                <X size={16} />
+              <button onClick={() => setModal(null)} className="rounded-full p-2 hover:bg-gray-100 text-gray-400 transition-all">
+                <X size={20} />
               </button>
             </div>
 
-            <div className="grid gap-4 p-5 md:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">Nombre</label>
-                <input value={form.nombre} onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+            <div className="grid gap-5 p-8 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-xs font-bold text-gray-700">Nombre de Usuario</label>
+                <input value={form.nombre} onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))} className={CONTROL} placeholder="Ej: Administrador" />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">Email</label>
-                <input type="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                <label className="mb-1.5 block text-xs font-bold text-gray-700">Correo Electrónico</label>
+                <input type="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} className={CONTROL} placeholder="usuario@modosabor.com" />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">{modal === 'nuevo' ? 'Contrasena inicial' : 'Nueva contrasena (opcional)'}</label>
-                <input type="password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">Rol</label>
-                <select value={form.rol} onChange={(e) => setForm((prev) => ({ ...prev, rol: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <label className="mb-1.5 block text-xs font-bold text-gray-700">Rol de Acceso</label>
+                <select value={form.rol} onChange={(e) => setForm((prev) => ({ ...prev, rol: e.target.value }))} className={CONTROL}>
                   {ROLES.map((role) => (
                     <option key={role.value} value={role.value}>{role.label}</option>
                   ))}
                 </select>
               </div>
-              {modal !== 'nuevo' ? (
-                <label className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-700 md:col-span-2">
-                  <input type="checkbox" checked={form.activo} onChange={(e) => setForm((prev) => ({ ...prev, activo: e.target.checked }))} className="h-4 w-4 accent-orange-500" />
-                  Usuario activo
-                </label>
-              ) : null}
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-xs font-bold text-gray-700">{modal === 'nuevo' ? 'Contraseña Inicial' : 'Cambiar Contraseña (dejar vacío para mantener)'}</label>
+                <input type="password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} className={CONTROL} placeholder="••••••••" />
+              </div>
+              {modal !== 'nuevo' && (
+                <div className="md:col-span-2 p-4 rounded-xl bg-gray-50 border border-gray-100">
+                  <label className="flex items-center justify-between gap-3 cursor-pointer">
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">Estado de la cuenta</p>
+                      <p className="text-[11px] font-semibold text-gray-400">Permitir que este usuario inicie sesión.</p>
+                    </div>
+                    <input type="checkbox" checked={form.activo} onChange={(e) => setForm((prev) => ({ ...prev, activo: e.target.checked }))} className="h-5 w-5 rounded border-gray-300 text-[#5D87FF] focus:ring-[#5D87FF] accent-[#5D87FF]" />
+                  </label>
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-5 py-4">
-              <button onClick={() => setModal(null)} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50">Cancelar</button>
-              <button onClick={guardar} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50">
-                <Save size={15} />
-                {saving ? 'Guardando...' : modal === 'nuevo' ? 'Crear usuario' : 'Guardar cambios'}
+            <div className="flex items-center justify-end gap-3 border-t border-gray-100 p-6 bg-gray-50/50">
+              <button onClick={() => setModal(null)} className="h-11 px-6 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-500 hover:bg-gray-50 transition-all">Cancelar</button>
+              <button onClick={guardar} disabled={saving} className="flex h-11 items-center gap-2 rounded-xl bg-[#5D87FF] px-8 text-sm font-bold text-white shadow-lg shadow-[#5D87FF]/20 hover:bg-[#4570EA] transition-all disabled:opacity-50">
+                <Save size={18} />
+                {saving ? 'Guardando...' : modal === 'nuevo' ? 'Crear Usuario' : 'Guardar Cambios'}
               </button>
             </div>
           </div>
@@ -207,3 +227,4 @@ export default function Usuarios() {
     </div>
   );
 }
+

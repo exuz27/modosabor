@@ -4,5 +4,9 @@ server/node_modules/
 client/dist/
 server/data/
 server/backups/
+__pycache__/
+*.pyc
+server/*.log
+deploy/modosabor-deploy.zip
 .env
 .env.*

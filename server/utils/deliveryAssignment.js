@@ -31,6 +31,14 @@ function normalizeZone(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function getPedidoById(db, pedidoId) {
+  return db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
+}
+
+function getRepartidorById(db, repartidorId) {
+  return repartidorId ? db.prepare('SELECT * FROM repartidores WHERE id = ?').get(repartidorId) : null;
+}
+
 function pickBestAvailableRepartidor(db, pedido = null) {
   const targetZone = normalizeZone(pedido?.delivery_zona);
   const disponibles = listAvailableRepartidores(db)
@@ -55,41 +63,59 @@ function pickBestAvailableRepartidor(db, pedido = null) {
   return disponibles[0] || null;
 }
 
-function assignPedidoToRepartidor(db, pedidoId, repartidorId) {
-  const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
+function assignPedidoToRepartidor(db, pedidoId, repartidorId, options = {}) {
+  const pedido = getPedidoById(db, pedidoId);
   if (!pedido) throw new Error('Pedido no encontrado');
   if (pedido.tipo_entrega !== 'delivery') throw new Error('Solo se puede asignar repartidor a pedidos delivery');
   if (['entregado', 'cancelado'].includes(pedido.estado)) throw new Error('El pedido ya no admite asignacion');
 
-  const repartidor = db.prepare('SELECT * FROM repartidores WHERE id = ?').get(repartidorId);
+  const repartidor = getRepartidorById(db, repartidorId);
   if (!repartidor || !repartidor.activo) throw new Error('Repartidor no encontrado');
   if (!repartidor.disponible && Number(pedido.repartidor_id || 0) !== Number(repartidor.id)) {
     throw new Error('Ese repartidor no esta disponible');
   }
 
   const previousRepartidorId = Number(pedido.repartidor_id || 0);
+  const previousRepartidor = previousRepartidorId && previousRepartidorId !== Number(repartidor.id)
+    ? getRepartidorById(db, previousRepartidorId)
+    : null;
   if (previousRepartidorId && previousRepartidorId !== Number(repartidor.id)) {
     db.prepare('UPDATE repartidores SET disponible = 1 WHERE id = ?').run(previousRepartidorId);
   }
 
+  const nextState = options.markEnCamino ? 'en_camino' : pedido.estado;
+
   db.prepare(`
     UPDATE pedidos
-    SET repartidor_id = ?, repartidor_nombre = ?, estado = 'en_camino', actualizado_en = CURRENT_TIMESTAMP
+    SET repartidor_id = ?, repartidor_nombre = ?, estado = ?, actualizado_en = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(repartidor.id, repartidor.nombre, pedido.id);
+  `).run(repartidor.id, repartidor.nombre, nextState, pedido.id);
 
   db.prepare('UPDATE repartidores SET disponible = 0 WHERE id = ?').run(repartidor.id);
 
   return {
-    pedido: db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedido.id),
-    repartidor: db.prepare('SELECT * FROM repartidores WHERE id = ?').get(repartidor.id),
+    pedido: getPedidoById(db, pedido.id),
+    repartidor: getRepartidorById(db, repartidor.id),
+    previousRepartidor,
     previousRepartidorId: previousRepartidorId || null,
   };
 }
 
-function autoAssignPedido(db, pedidoId) {
-  const pedido = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(pedidoId);
-  const repartidor = pickBestAvailableRepartidor(db, pedido);
+function autoAssignPedido(db, pedidoId, options = {}) {
+  const pedido = getPedidoById(db, pedidoId);
+  const disponibles = listAvailableRepartidores(db);
+  if (options.onlyIfSingleAvailable && disponibles.length !== 1) {
+    return {
+      ok: false,
+      reason: disponibles.length === 0 ? 'no_available_repartidor' : 'multiple_available_repartidores',
+      repartidor: null,
+      pedido,
+    };
+  }
+
+  const repartidor = options.onlyIfSingleAvailable
+    ? (disponibles[0] || null)
+    : pickBestAvailableRepartidor(db, pedido);
   if (!repartidor) {
     return {
       ok: false,
@@ -99,7 +125,7 @@ function autoAssignPedido(db, pedidoId) {
     };
   }
 
-  const result = assignPedidoToRepartidor(db, pedidoId, repartidor.id);
+  const result = assignPedidoToRepartidor(db, pedidoId, repartidor.id, options);
   return {
     ok: true,
     ...result,
@@ -110,6 +136,8 @@ function autoAssignPedido(db, pedidoId) {
 module.exports = {
   listAvailableRepartidores,
   pickBestAvailableRepartidor,
+  getPedidoById,
+  getRepartidorById,
   assignPedidoToRepartidor,
   autoAssignPedido,
 };

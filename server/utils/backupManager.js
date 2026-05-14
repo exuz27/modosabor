@@ -1,15 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
-
-const dataDir = path.join(__dirname, '..', 'data');
-const dbFile = path.join(dataDir, 'modosabor.db');
-const backupsDir = path.join(dataDir, 'backups');
+const { backupsDir, dbFile, ensureDir } = require('./storagePaths');
 
 function ensureBackupsDir() {
-  if (!fs.existsSync(backupsDir)) {
-    fs.mkdirSync(backupsDir, { recursive: true });
-  }
+  ensureDir(backupsDir);
 }
 
 function timestampForFile(date = new Date()) {
@@ -172,39 +167,62 @@ function restoreDatabaseBackup(db, file, options = {}) {
 }
 
 function resetOperationalData(db) {
-  db.exec(`
-    DELETE FROM impresiones;
-    DELETE FROM whatsapp_envios;
-    DELETE FROM whatsapp_mensajes;
-    DELETE FROM whatsapp_pedidos_borrador_items;
-    DELETE FROM whatsapp_pedidos_borrador;
-    DELETE FROM whatsapp_conversaciones;
-    DELETE FROM mercadopago_eventos;
-    DELETE FROM mesa_reservas;
-    DELETE FROM cierres_caja;
-    DELETE FROM auditoria_eventos;
-    DELETE FROM pedidos;
-  `);
+  try {
+    db.exec('BEGIN');
 
-  db.exec(`
-    UPDATE clientes
-    SET total_gastado = 0,
-        total_pedidos = 0,
-        puntos = 0,
-        sellos = 0,
-        frecuencia_dias = 7,
-        canjes_premio = 0
-  `);
+    // 1. Limpieza de datos operativos y de comunicación
+    db.exec(`
+      DELETE FROM impresiones;
+      DELETE FROM whatsapp_envios;
+      DELETE FROM whatsapp_mensajes;
+      DELETE FROM whatsapp_pedidos_borrador_items;
+      DELETE FROM whatsapp_pedidos_borrador;
+      DELETE FROM whatsapp_conversaciones;
+      DELETE FROM mercadopago_eventos;
+      DELETE FROM mesa_reservas;
+      DELETE FROM cierres_caja;
+      DELETE FROM auditoria_eventos;
+      DELETE FROM pedidos;
+      DELETE FROM cupones_usados;
+    `);
 
-  db.exec(`
-    UPDATE repartidores
-    SET disponible = 1,
-        latitud = NULL,
-        longitud = NULL,
-        ultima_ubicacion_en = NULL
-  `);
+    // 2. Limpieza de Inventario (Crucial para consistencia)
+    db.exec(`
+      DELETE FROM inventario_movimientos;
+      UPDATE inventario_insumos SET stock_actual = 0, actualizado_en = CURRENT_TIMESTAMP;
+      UPDATE productos SET stock_directo = 0;
+    `);
 
-  db.prepare(`INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('numero_pedido_actual', '1')`).run();
+    // 3. Reinicio de estadísticas de clientes
+    db.exec(`
+      UPDATE clientes
+      SET total_gastado = 0,
+          total_pedidos = 0,
+          puntos = 0,
+          sellos = 0,
+          frecuencia_dias = 7,
+          canjes_premio = 0
+    `);
+
+    // 4. Reset de repartidores
+    db.exec(`
+      UPDATE repartidores
+      SET disponible = 1,
+          latitud = NULL,
+          longitud = NULL,
+          ultima_ubicacion_en = NULL
+    `);
+
+    // 5. Reset de contadores de configuración
+    db.prepare("INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('numero_pedido_actual', '1')").run();
+
+    db.exec('COMMIT');
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {}
+    throw error;
+  }
 }
 
 function startAutomaticBackups(db) {

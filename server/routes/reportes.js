@@ -4,6 +4,8 @@ const db = require('../db');
 const auth = require('../middleware/auth');
 const { requirePermission } = require('../utils/permissions');
 const { resolveShiftLabel } = require('../utils/shifts');
+const { summarizePaymentRows } = require('../utils/paymentStatus');
+const { hydratePedido } = require('../services/pedidoService');
 
 function toDateOnly(value) {
   return new Date(value).toISOString().split('T')[0];
@@ -14,15 +16,6 @@ function parseDateRange(req) {
   const hasta = req.query.hasta || toDateOnly(today);
   const desde = req.query.desde || toDateOnly(new Date(today.getTime() - 6 * 86400000));
   return { desde, hasta };
-}
-
-function parseItems(raw) {
-  try {
-    const items = JSON.parse(raw || '[]');
-    return Array.isArray(items) ? items : [];
-  } catch {
-    return [];
-  }
 }
 
 function diffMinutes(start, end) {
@@ -97,57 +90,154 @@ function groupByShift(rows, config) {
     .sort((a, b) => b.total - a.total || b.pedidos - a.pedidos);
 }
 
-function buildProductAnalytics(rows) {
-  const productos = db.prepare(`
-    SELECT p.id, p.nombre, p.costo, c.nombre as categoria
-    FROM productos p
-    LEFT JOIN categorias c ON c.id = p.categoria_id
+function buildVipCustomers(limit = 5) {
+  const rows = db.prepare(`
+    SELECT
+      c.id,
+      c.nombre,
+      c.telefono,
+      c.total_pedidos,
+      c.total_gastado,
+      c.nivel,
+      c.recompensas_pendientes,
+      COALESCE(MAX(CASE WHEN p.estado = 'entregado' THEN p.creado_en END), '') AS ultima_compra
+    FROM clientes c
+    LEFT JOIN pedidos p ON p.cliente_id = c.id
+    WHERE c.total_pedidos > 0
+    GROUP BY c.id
   `).all();
-  const byId = new Map(productos.map((item) => [item.id, item]));
+
+  return rows
+    .map((row) => {
+      const ultimaCompraTs = row.ultima_compra ? new Date(String(row.ultima_compra).replace(' ', 'T')).getTime() : 0;
+      const diasSinComprar = ultimaCompraTs ? Math.max(0, Math.floor((Date.now() - ultimaCompraTs) / 86400000)) : 999;
+      const nivelBonus = ({
+        Bronce: 0,
+        Plata: 6,
+        Oro: 12,
+        Platino: 18,
+      })[row.nivel] || 0;
+      const score = Math.round(
+        (Number(row.total_gastado || 0) / 1200)
+        + (Number(row.total_pedidos || 0) * 4)
+        + nivelBonus
+        + Math.max(0, 12 - Math.min(diasSinComprar, 12))
+        + (Number(row.recompensas_pendientes || 0) * 5)
+      );
+
+      return {
+        ...row,
+        diasSinComprar,
+        score,
+      };
+    })
+    .sort((a, b) => b.score - a.score || Number(b.total_gastado || 0) - Number(a.total_gastado || 0) || Number(b.total_pedidos || 0) - Number(a.total_pedidos || 0))
+    .slice(0, limit);
+}
+
+function buildCriticalStock(limit = 10) {
+  return db.prepare(`
+    SELECT
+      id,
+      nombre,
+      stock_actual,
+      stock_minimo,
+      unidad,
+      CASE
+        WHEN stock_minimo > 0 THEN ROUND((stock_actual / stock_minimo) * 100)
+        ELSE 0
+      END AS cobertura_pct
+    FROM inventario_insumos
+    WHERE activo = 1
+      AND (
+        (stock_minimo > 0 AND stock_actual <= stock_minimo)
+        OR (stock_minimo <= 0 AND stock_actual < 10)
+      )
+    ORDER BY
+      CASE
+        WHEN stock_minimo > 0 THEN (stock_actual - stock_minimo)
+        ELSE stock_actual
+      END ASC,
+      stock_actual ASC
+    LIMIT ?
+  `).all(limit);
+}
+
+function getPedidoItemRows(orderIds = []) {
+  const normalizedIds = Array.from(new Set((orderIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)));
+  if (!normalizedIds.length) return [];
+
+  const chunkSize = 500;
+  const rows = [];
+
+  for (let index = 0; index < normalizedIds.length; index += chunkSize) {
+    const chunk = normalizedIds.slice(index, index + chunkSize);
+    const placeholders = chunk.map(() => '?').join(',');
+    rows.push(...db.prepare(`
+      SELECT
+        pi.pedido_id,
+        pi.producto_id,
+        pi.categoria_id,
+        pi.nombre,
+        pi.cantidad,
+        pi.precio_unitario,
+        pi.subtotal,
+        pi.descripcion,
+        p.costo,
+        p.imagen,
+        COALESCE(c.nombre, 'Sin categoria') AS categoria
+      FROM pedido_items pi
+      LEFT JOIN productos p ON p.id = pi.producto_id
+      LEFT JOIN categorias c ON c.id = COALESCE(pi.categoria_id, p.categoria_id)
+      WHERE pi.pedido_id IN (${placeholders})
+      ORDER BY pi.pedido_id ASC, pi.id ASC
+    `).all(...chunk));
+  }
+
+  return rows;
+}
+
+function buildProductAnalytics(rows) {
   const productMap = new Map();
   const categoryMap = new Map();
   let totalCosto = 0;
 
-  rows.forEach((pedido) => {
-    const items = parseItems(pedido.items);
-    items.forEach((item) => {
-      const cantidad = Number(item.cantidad || 0);
-      const lineTotal = Number(item.precio_unitario || 0) * cantidad;
-      const dbProduct = byId.get(item.producto_id);
-      const name = item.nombre || dbProduct?.nombre || 'Producto';
-      const category = dbProduct?.categoria || 'Sin categoria';
-      const costUnit = Number(dbProduct?.costo || 0);
-      const lineCost = costUnit * cantidad;
-      const lineMargin = lineTotal - lineCost;
-      totalCosto += lineCost;
+  getPedidoItemRows(rows.map((pedido) => pedido.id)).forEach((item) => {
+    const cantidad = Number(item.cantidad || 0);
+    const lineTotal = Number(item.subtotal || (Number(item.precio_unitario || 0) * cantidad));
+    const name = item.nombre || 'Producto';
+    const category = item.categoria || 'Sin categoria';
+    const costUnit = Number(item.costo || 0);
+    const lineCost = costUnit * cantidad;
+    const lineMargin = lineTotal - lineCost;
+    totalCosto += lineCost;
 
-      const productCurrent = productMap.get(name) || {
-        nombre: name,
-        cantidad: 0,
-        total: 0,
-        costo: 0,
-        margen: 0,
-        categoria: category,
-      };
-      productCurrent.cantidad += cantidad;
-      productCurrent.total += lineTotal;
-      productCurrent.costo += lineCost;
-      productCurrent.margen += lineMargin;
-      productMap.set(name, productCurrent);
+    const productCurrent = productMap.get(name) || {
+      nombre: name,
+      cantidad: 0,
+      total: 0,
+      costo: 0,
+      margen: 0,
+      categoria: category,
+    };
+    productCurrent.cantidad += cantidad;
+    productCurrent.total += lineTotal;
+    productCurrent.costo += lineCost;
+    productCurrent.margen += lineMargin;
+    productMap.set(name, productCurrent);
 
-      const categoryCurrent = categoryMap.get(category) || {
-        categoria: category,
-        cantidad: 0,
-        total: 0,
-        costo: 0,
-        margen: 0,
-      };
-      categoryCurrent.cantidad += cantidad;
-      categoryCurrent.total += lineTotal;
-      categoryCurrent.costo += lineCost;
-      categoryCurrent.margen += lineMargin;
-      categoryMap.set(category, categoryCurrent);
-    });
+    const categoryCurrent = categoryMap.get(category) || {
+      categoria: category,
+      cantidad: 0,
+      total: 0,
+      costo: 0,
+      margen: 0,
+    };
+    categoryCurrent.cantidad += cantidad;
+    categoryCurrent.total += lineTotal;
+    categoryCurrent.costo += lineCost;
+    categoryCurrent.margen += lineMargin;
+    categoryMap.set(category, categoryCurrent);
   });
 
   const topProductos = Array.from(productMap.values())
@@ -418,14 +508,82 @@ function buildBirthdayAnalytics() {
   `).all();
 }
 
+function buildTopProductsAllTime(productosPorId, productosPorNombre, limit = 5) {
+  const rows = db.prepare(`
+    SELECT id
+    FROM pedidos
+    WHERE estado != 'cancelado'
+  `).all();
+
+  const vendidos = {};
+  getPedidoItemRows(rows.map((pedido) => pedido.id)).forEach((item) => {
+    const productoRelacionado = productosPorId.get(String(item.producto_id || ''))
+      || productosPorNombre.get(String(item.nombre || '').trim().toLowerCase());
+    const key = item.producto_id || item.nombre;
+    if (!vendidos[key]) {
+      vendidos[key] = {
+        id: productoRelacionado?.id || item.producto_id || null,
+        nombre: item.nombre || productoRelacionado?.nombre || 'Producto',
+        categoria: productoRelacionado?.categoria || item.categoria || 'Otros',
+        imagen: productoRelacionado?.imagen || item.imagen || '',
+        precio: Number(item.precio_unitario || 0),
+        cantidad: 0,
+        total: 0,
+      };
+    }
+    vendidos[key].cantidad += Number(item.cantidad || 0);
+    vendidos[key].total += Number(item.subtotal || 0);
+  });
+
+  return Object.values(vendidos)
+    .sort((a, b) => b.cantidad - a.cantidad || b.total - a.total)
+    .slice(0, limit);
+}
+
+function buildTopCustomersAllTime(limit = 5) {
+  return db.prepare(`
+    SELECT
+      c.id,
+      c.nombre,
+      c.telefono,
+      c.total_pedidos,
+      c.total_gastado,
+      c.nivel,
+      COALESCE(MAX(CASE WHEN p.estado = 'entregado' THEN p.creado_en END), '') AS ultima_compra
+    FROM clientes c
+    LEFT JOIN pedidos p ON p.cliente_id = c.id
+    WHERE c.total_pedidos > 0
+    GROUP BY c.id
+    ORDER BY c.total_gastado DESC, c.total_pedidos DESC, c.nombre ASC
+    LIMIT ?
+  `).all(limit);
+}
+
 router.get('/dashboard', auth, requirePermission('dashboard.view'), (req, res) => {
   const hoy = new Date().toISOString().split('T')[0];
   const ayer = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const catalogoProductos = db.prepare(`
+    SELECT p.id, p.nombre, p.imagen, COALESCE(c.nombre, 'Otros') as categoria
+    FROM productos p
+    LEFT JOIN categorias c ON c.id = p.categoria_id
+  `).all();
+  const productosPorId = new Map(catalogoProductos.map((producto) => [String(producto.id), producto]));
+  const productosPorNombre = new Map(catalogoProductos.map((producto) => [String(producto.nombre || '').trim().toLowerCase(), producto]));
 
+  // Ventas hoy
   const ventasHoy = db.prepare("SELECT COUNT(*) as pedidos, COALESCE(SUM(total),0) as total FROM pedidos WHERE DATE(creado_en)=? AND estado!='cancelado'").get(hoy);
-  const ventasAyer = db.prepare("SELECT COALESCE(SUM(total),0) as total FROM pedidos WHERE DATE(creado_en)=? AND estado!='cancelado'").get(ayer);
+  
+  // Ventas ayer para calcular tendencia
+  const ventasAyerRow = db.prepare("SELECT COUNT(*) as pedidos, COALESCE(SUM(total),0) as total FROM pedidos WHERE DATE(creado_en)=? AND estado!='cancelado'").get(ayer);
+  const ventasAyer = ventasAyerRow.total || 0;
+  const pedidosAyer = ventasAyerRow.pedidos || 0;
+  
+  // Calcular tendencias porcentuales
+  const tendenciaVentas = ventasAyer > 0 ? Math.round(((ventasHoy.total - ventasAyer) / ventasAyer) * 100) : 0;
+  const tendenciaPedidos = pedidosAyer > 0 ? Math.round(((ventasHoy.pedidos - pedidosAyer) / pedidosAyer) * 100) : 0;
+  
   const pedidosActivos = db.prepare("SELECT COUNT(*) as c FROM pedidos WHERE estado NOT IN ('entregado','cancelado')").get();
-  const clientesTotal = db.prepare('SELECT COUNT(*) as c FROM clientes').get();
+  const pedidosEnDelivery = db.prepare("SELECT COUNT(*) as c FROM pedidos WHERE tipo_entrega='delivery' AND estado NOT IN ('entregado','cancelado')").get();
 
   const ventas7dias = db.prepare(`
     SELECT DATE(creado_en) as fecha, COUNT(*) as pedidos, COALESCE(SUM(total),0) as total
@@ -433,19 +591,67 @@ router.get('/dashboard', auth, requirePermission('dashboard.view'), (req, res) =
     GROUP BY DATE(creado_en) ORDER BY fecha ASC
   `).all();
 
-  const porMetodoPago = db.prepare(`
-    SELECT metodo_pago, COUNT(*) as cantidad, COALESCE(SUM(total),0) as total
-    FROM pedidos WHERE DATE(creado_en)=? AND estado!='cancelado' GROUP BY metodo_pago
-  `).all(hoy);
+  const pedidosHoyDetallados = db.prepare("SELECT * FROM pedidos WHERE DATE(creado_en)=? AND estado!='cancelado'").all(hoy);
+  const paymentSummaryHoy = summarizePaymentRows(pedidosHoyDetallados);
+  const porMetodoPago = paymentSummaryHoy.byMethod;
 
-  const ultimosPedidos = db.prepare("SELECT * FROM pedidos ORDER BY creado_en DESC LIMIT 5").all();
+  const ultimosPedidos = db.prepare("SELECT * FROM pedidos ORDER BY creado_en DESC LIMIT 5").all().map(hydratePedido);
 
-  res.json({ ventasHoy, ventasAyer: ventasAyer.total, pedidosActivos: pedidosActivos.c, clientesTotal: clientesTotal.c, ventas7dias, porMetodoPago, ultimosPedidos });
+  // Productos más vendidos hoy
+  const productosVendidos = {};
+  getPedidoItemRows(pedidosHoyDetallados.map((pedido) => pedido.id)).forEach((item) => {
+    const productoRelacionado = productosPorId.get(String(item.producto_id || ''))
+      || productosPorNombre.get(String(item.nombre || '').trim().toLowerCase());
+    const key = item.producto_id || item.nombre;
+    if (!productosVendidos[key]) {
+      productosVendidos[key] = {
+        id: productoRelacionado?.id || item.producto_id || null,
+        nombre: item.nombre || productoRelacionado?.nombre || 'Producto',
+        categoria: productoRelacionado?.categoria || item.categoria || 'Otros',
+        imagen: productoRelacionado?.imagen || item.imagen || '',
+        precio: Number(item.precio_unitario || 0),
+        cantidad: 0,
+        total: 0,
+      };
+    }
+    productosVendidos[key].cantidad += Number(item.cantidad || 0);
+    productosVendidos[key].total += Number(item.subtotal || 0);
+  });
+  const productosEstrella = Object.values(productosVendidos)
+    .sort((a, b) => b.cantidad - a.cantidad)
+    .slice(0, 5);
+  const productosMasVendidosGeneral = buildTopProductsAllTime(productosPorId, productosPorNombre, 5);
+
+  const clientesVIP = buildVipCustomers(5);
+  const clientesMasCompran = buildTopCustomersAllTime(5);
+  const stockCritico = buildCriticalStock(10);
+
+  // Estado de caja actual
+  const cajaActiva = db.prepare("SELECT id, abierta_en, abierta_por_nombre FROM cierres_caja WHERE estado = 'abierta'").get();
+
+  res.json({ 
+    ventasHoy, 
+    ventasAyer, 
+    pedidosAyer,
+    tendenciaVentas,
+    tendenciaPedidos,
+    pedidosActivos: pedidosActivos.c, 
+    pedidosEnDelivery: pedidosEnDelivery.c,
+    ventas7dias, 
+    porMetodoPago, 
+    ultimosPedidos,
+    productosEstrella,
+    productosMasVendidosGeneral,
+    clientesVIP,
+    clientesMasCompran,
+    stockCritico,
+    cajaEstado: cajaActiva ? { abierta: true, ...cajaActiva } : { abierta: false }
+  });
 });
 
 router.get('/ventas', auth, requirePermission('reportes.view'), (req, res) => {
   const { desde, hasta } = parseDateRange(req);
-  const pedidos = db.prepare("SELECT * FROM pedidos WHERE DATE(creado_en) BETWEEN ? AND ? AND estado!='cancelado' ORDER BY creado_en DESC").all(desde, hasta);
+  const pedidos = db.prepare("SELECT * FROM pedidos WHERE DATE(creado_en) BETWEEN ? AND ? AND estado!='cancelado' ORDER BY creado_en DESC").all(desde, hasta).map(hydratePedido);
   const totales = db.prepare("SELECT COUNT(*) as cantidad, COALESCE(SUM(total),0) as total FROM pedidos WHERE DATE(creado_en) BETWEEN ? AND ? AND estado!='cancelado'").get(desde, hasta);
   res.json({ pedidos, totales });
 });
@@ -475,13 +681,8 @@ router.get('/premium', auth, requirePermission('reportes.view'), (req, res) => {
     ? Math.round(leadTimes.reduce((acc, value) => acc + value, 0) / leadTimes.length)
     : 0;
 
-  const paymentMethods = db.prepare(`
-    SELECT metodo_pago, COUNT(*) AS cantidad, COALESCE(SUM(total),0) AS total
-    FROM pedidos
-    WHERE DATE(creado_en) BETWEEN ? AND ? AND estado != 'cancelado'
-    GROUP BY metodo_pago
-    ORDER BY total DESC
-  `).all(desde, hasta);
+  const paymentSummary = summarizePaymentRows(validRows);
+  const paymentMethods = paymentSummary.byMethod;
 
   const deliveryCount = validRows.filter((row) => row.tipo_entrega === 'delivery').length;
   const retiroCount = validRows.filter((row) => row.tipo_entrega === 'retiro').length;
@@ -513,6 +714,8 @@ router.get('/premium', auth, requirePermission('reportes.view'), (req, res) => {
       margenPct,
       cantidadPedidos,
       ticketPromedio,
+      totalCobrado: paymentSummary.totalCobrado,
+      totalPendienteCobro: paymentSummary.totalPendiente,
       entregados: entregados.length,
       cancelados,
       tiempoPromedio,
@@ -535,7 +738,7 @@ router.get('/premium', auth, requirePermission('reportes.view'), (req, res) => {
     delivery,
     salon,
     paymentMethods,
-    recentOrders: validRows.slice(0, 12),
+    recentOrders: validRows.slice(0, 12).map(hydratePedido),
   });
 });
 

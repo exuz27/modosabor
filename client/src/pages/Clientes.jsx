@@ -1,6 +1,5 @@
-﻿import { useEffect, useMemo, useState } from 'react';
-import { differenceInDays, format, isSameMonth, isValid, parseISO } from 'date-fns';
-import { es } from 'date-fns/locale';
+﻿import { useEffect, useMemo, useState, useRef } from 'react';
+import { format, parseISO } from 'date-fns';
 import toast from 'react-hot-toast';
 import {
   AlertTriangle,
@@ -21,694 +20,1329 @@ import {
   Trash2,
   UserRound,
   X,
+  TrendingUp,
+  MessageCircle,
+  Mail,
+  History,
+  CreditCard,
+  CheckCircle2,
+  Ticket,
+  Camera,
+  User,
+  Settings,
+  QrCode,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import api from '../lib/api.js';
+import { useAppConfig } from '../context/AppConfigContext.jsx';
+import { ToggleSwitch } from '../components/Configuracion/ConfigComponents.jsx';
+import ClientesCampaignsSection from '../components/Clientes/ClientesCampaignsSection.jsx';
+import ClientesGrid from '../components/Clientes/ClientesGrid.jsx';
 
-const CONTROL =
-  'h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-100';
+// Importación de Avatars Locales
+import user1 from '../image/profile/user-1.jpg';
+import user2 from '../image/profile/user-2.jpg';
+import user3 from '../image/profile/user-3.jpg';
+import user4 from '../image/profile/user-4.jpg';
+import user5 from '../image/profile/user-5.jpg';
+import user6 from '../image/profile/user-6.jpg';
+import user7 from '../image/profile/user-7.jpg';
+import user8 from '../image/profile/user-8.jpg';
+import user9 from '../image/profile/user-9.jpg';
+import user10 from '../image/profile/user-10.jpg';
+import user11 from '../image/profile/user-11.jpg';
+import user12 from '../image/profile/user-12.jpg';
 
-const EMPTY_FORM = {
-  nombre: '',
-  telefono: '',
-  email: '',
-  direccion: '',
-  notas: '',
-  fecha_nacimiento: '',
-  tags: [],
+const LOCAL_AVATARS = [user1, user2, user3, user4, user5, user6, user7, user8, user9, user10, user11, user12];
+
+const CONTROL = 'h-12 w-full rounded-2xl border-none bg-gray-50 px-4 text-sm font-bold text-gray-700 outline-none transition focus:ring-2 focus:ring-[#5D87FF]/20';
+
+const LEVEL_COLORS = {
+  Bronce: '#b45309',
+  Plata: '#94a3b8',
+  Oro: '#FFAE1F',
+  Platino: '#5D87FF'
 };
 
-const money = (v) => `$${Number(v || 0).toLocaleString('es-AR')}`;
-const LEVEL_STEPS = [
-  { nivel: 'Bronce', min: 0, next: 'Plata', nextMin: 500 },
-  { nivel: 'Plata', min: 500, next: 'Oro', nextMin: 1500 },
-  { nivel: 'Oro', min: 1500, next: 'Platino', nextMin: 3000 },
-  { nivel: 'Platino', min: 3000, next: null, nextMin: null },
+const DEFAULT_CAMPAIGN_DASHBOARD = {
+  campanas: 0,
+  clientes: 0,
+  enviados_ok: 0,
+  convertidos: 0,
+  ingreso: 0,
+  tasa_conversion: 0,
+  tasa_envio: 0,
+};
+
+const CAMPAIGN_HISTORY_FILTERS = [
+  { value: 'Todos', label: 'Todos' },
+  { value: 'Convertidas', label: 'Convertidas' },
+  { value: 'Sin convertir', label: 'Sin convertir' },
+  { value: 'Con error', label: 'Con error' },
 ];
 
-function safeDate(value) {
-  if (!value) return null;
-  const parsed = parseISO(value);
-  return isValid(parsed) ? parsed : null;
-}
+const SEGMENT_CAMPAIGN_COPY = {
+  'premio-listo': {
+    filter: 'Premio listo',
+    title: 'Premio listo',
+    message: (negocio) => `Hola, tienes un premio listo para canjear en ${negocio}. Cuando quieras, te ayudamos a aprovecharlo.`,
+  },
+  vip: {
+    filter: 'VIP',
+    title: 'VIP',
+    message: (negocio) => `Hola, queremos agradecerte por ser cliente VIP de ${negocio}. Tenemos un beneficio especial preparado para ti.`,
+  },
+  riesgo: {
+    filter: 'En riesgo',
+    title: 'En riesgo',
+    message: (negocio) => `Hola, te extrañamos en ${negocio}. Queremos invitarte a volver con una propuesta especial.`,
+  },
+  nuevo: {
+    filter: 'Nuevo',
+    title: 'Nuevos',
+    message: (negocio) => `Hola, gracias por sumarte a ${negocio}. Queremos darte la bienvenida con un beneficio especial.`,
+  },
+};
 
-function tone(level) {
-  if (level === 'Platino') return '#94a3b8';
-  if (level === 'Oro') return '#f59e0b';
-  if (level === 'Plata') return '#9ca3af';
-  return '#b45309';
-}
+const fmtMoney = (v) => `$${Number(v || 0).toLocaleString('es-AR')}`;
 
-function rgba(hex, alpha) {
-  const clean = (hex || '#f97316').replace('#', '');
-  const full = clean.length === 3 ? clean.split('').map((char) => char + char).join('') : clean;
-  const value = Number.parseInt(full, 16);
-  if (Number.isNaN(value)) return `rgba(249,115,22,${alpha})`;
-  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${alpha})`;
-}
-
-function rewards(cliente) {
-  const totalPedidos = Math.max(0, Number(cliente?.total_pedidos || 0));
-  const canjes = Math.max(0, Math.min(Number(cliente?.canjes_premio || 0), Math.floor(totalPedidos / 6)));
-  const comprasDisponibles = Math.max(0, totalPedidos - canjes * 6);
-  return {
-    pendientes: Math.floor(comprasDisponibles / 6),
-    sellos: comprasDisponibles % 6,
-  };
-}
-
-function levelProgress(cliente) {
-  const points = Math.max(0, Number(cliente?.puntos || 0));
-  const current = LEVEL_STEPS.slice().reverse().find((step) => points >= step.min) || LEVEL_STEPS[0];
-  if (!current?.next || !current.nextMin) {
-    return {
-      current,
-      next: null,
-      remaining: 0,
-      progressPct: 100,
-    };
-  }
-
-  const span = Math.max(1, current.nextMin - current.min);
-  const progress = Math.max(0, Math.min(100, Math.round(((points - current.min) / span) * 100)));
-  return {
-    current,
-    next: LEVEL_STEPS.find((step) => step.nivel === current.next) || null,
-    remaining: Math.max(0, current.nextMin - points),
-    progressPct: progress,
-  };
-}
-
-function promoRecommendation(cliente, rewardState, campana, campanaCumple) {
-  if (!cliente) return null;
-  if (rewardState?.pendientes > 0) {
-    return {
-      title: 'Premio listo para canjear',
-      detail: `Ya puede usar ${rewardState.pendientes} regalo${rewardState.pendientes === 1 ? '' : 's'} por completar compras.`,
-      tone: 'emerald',
-    };
-  }
-  if (cliente.cumpleEsteMes) {
-    return {
-      title: 'Campana de cumple',
-      detail: `Conviene enviar saludo con cupón ${campanaCumple?.cupon || 'VOLVE10'} este mes.`,
-      tone: 'pink',
-    };
-  }
-  if (cliente.estadoReal === 'Perdido' || cliente.estadoReal === 'Riesgo') {
-    return {
-      title: 'Promo recomendada',
-      detail: `Cliente ideal para reactivar con ${campana?.cupon || 'VOLVE10'} y mensaje de recompra.`,
-      tone: 'amber',
-    };
-  }
-  const progress = levelProgress(cliente);
-  if (progress.remaining > 0 && progress.next) {
-    return {
-      title: `Subir a ${progress.next.nivel}`,
-      detail: `Le faltan ${progress.remaining} puntos para pasar al siguiente nivel.`,
-      tone: 'blue',
-    };
-  }
-  return {
-    title: 'Cliente fidelizado',
-    detail: 'Mantener contacto con promo suave o beneficio VIP para sostener recompra.',
-    tone: 'slate',
-  };
-}
-
-function promoToneClasses(tone) {
-  if (tone === 'emerald') return 'border-emerald-200 bg-emerald-50 text-emerald-900';
-  if (tone === 'pink') return 'border-pink-200 bg-pink-50 text-pink-900';
-  if (tone === 'amber') return 'border-amber-200 bg-amber-50 text-amber-900';
-  if (tone === 'blue') return 'border-sky-200 bg-sky-50 text-sky-900';
-  return 'border-slate-200 bg-slate-50 text-slate-900';
-}
-
-function enrich(cliente) {
-  const today = new Date();
-  const ultimaCompra = safeDate(cliente?.ultima_compra);
-  const fechaNacimiento = safeDate(cliente?.fecha_nacimiento);
-  const diasUltimaCompra = ultimaCompra ? differenceInDays(today, ultimaCompra) : 999;
-  const frecuencia = Number(cliente?.frecuencia_dias || 7);
-
-  let estadoReal = 'Activo';
-  if (diasUltimaCompra > 60) estadoReal = 'Perdido';
-  else if (diasUltimaCompra > frecuencia * 2) estadoReal = 'Riesgo';
-  else if ((cliente?.total_pedidos || 0) >= 10 || ['Oro', 'Platino'].includes(cliente?.nivel)) estadoReal = 'VIP Activo';
+const summarizeCampaignMetrics = (results = [], totalClientes = 0) => {
+  const safeResults = Array.isArray(results) ? results : [];
+  const enviadosOk = safeResults.filter((item) => item?.ok).length;
+  const enviadosError = safeResults.length - enviadosOk;
+  const enviadosManual = safeResults.filter((item) => item?.mode === 'manual').length;
+  const enviadosApi = safeResults.filter((item) => item?.mode === 'api').length;
+  const enviadosLocal = safeResults.filter((item) => item?.mode === 'local').length;
+  const total = Number(totalClientes || safeResults.length || 0);
+  const cobertura = total > 0 ? Number(((safeResults.length / total) * 100).toFixed(1)) : 0;
+  const tasaEnvio = safeResults.length > 0 ? Number(((enviadosOk / safeResults.length) * 100).toFixed(1)) : 0;
 
   return {
-    ...cliente,
-    estadoReal,
-    diasUltimaCompra,
-    cumpleEsteMes: fechaNacimiento ? isSameMonth(fechaNacimiento, today) : false,
+    total_clientes: total,
+    procesados: safeResults.length,
+    enviados_ok: enviadosOk,
+    enviados_error: enviadosError,
+    enviados_manual: enviadosManual,
+    enviados_api: enviadosApi,
+    enviados_local: enviadosLocal,
+    cobertura,
+    tasa_envio: tasaEnvio,
+    clientes_convertidos: 0,
+    pedidos_generados: 0,
+    ingreso_generado: 0,
+    tasa_conversion: 0,
+    ventana_dias: 30,
   };
-}
+};
 
-function Badge({ children, className = '' }) {
-  return <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${className}`}>{children}</span>;
-}
+const aggregateCampaignDashboard = (history = [], fallback = DEFAULT_CAMPAIGN_DASHBOARD) => {
+  if (!history.length) return fallback;
 
-function Stat({ label, value, icon: Icon, color }) {
+  const summary = history.reduce((acc, item) => {
+    acc.campanas += 1;
+    acc.clientes += Number(item.metricas?.total_clientes || item.total_clientes || 0);
+    acc.enviados_ok += Number(item.metricas?.enviados_ok || item.enviados_ok || 0);
+    acc.convertidos += Number(item.metricas?.clientes_convertidos || 0);
+    acc.ingreso += Number(item.metricas?.ingreso_generado || 0);
+    return acc;
+  }, { ...DEFAULT_CAMPAIGN_DASHBOARD });
+
+  return {
+    ...summary,
+    tasa_conversion: summary.clientes > 0 ? Number(((summary.convertidos / summary.clientes) * 100).toFixed(1)) : 0,
+    tasa_envio: summary.clientes > 0 ? Number(((summary.enviados_ok / summary.clientes) * 100).toFixed(1)) : 0,
+  };
+};
+
+const matchesHistoryFilter = (item, filter) => {
+  if (filter === 'Convertidas') return Number(item.metricas?.clientes_convertidos || 0) > 0;
+  if (filter === 'Sin convertir') return Number(item.metricas?.clientes_convertidos || 0) === 0;
+  if (filter === 'Con error') return Number(item.metricas?.enviados_error || item.enviados_error || 0) > 0;
+  return true;
+};
+
+function StatCard({ label, value, icon: Icon, tint = 'blue' }) {
+  const tints = {
+    blue: 'bg-blue-50 text-[#5D87FF]',
+    amber: 'bg-amber-50 text-[#FFAE1F]',
+    rose: 'bg-rose-50 text-[#FA896B]',
+    emerald: 'bg-emerald-50 text-[#13DEB9]',
+    sky: 'bg-sky-50 text-[#49BEFF]'
+  };
   return (
-    <div className="rounded-[24px] border border-white/70 bg-white/90 px-4 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)]" style={{ backgroundImage: `linear-gradient(135deg, ${rgba(color, 0.14)}, rgba(255,255,255,0.94) 62%)` }}>
-      <div className="flex items-center justify-between gap-3">
+    <div className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1">
+      <div className="flex items-center justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-          <p className="mt-2 text-2xl font-black tracking-tight text-slate-950">{value}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-1">{label}</p>
+          <p className="text-2xl font-black text-gray-900">{value}</p>
         </div>
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl" style={{ backgroundColor: rgba(color, 0.16), color }}>
-          <Icon size={18} />
+        <div className={`h-12 w-12 rounded-2xl flex items-center justify-center ${tints[tint]}`}>
+          <Icon size={22} strokeWidth={2.5} />
         </div>
       </div>
     </div>
   );
 }
 
+const EMPTY_FORM = { 
+  nombre: '', 
+  telefono: '', 
+  direccion: '', 
+  fecha_nacimiento: '', 
+  notas: '', 
+  avatar_url: '',
+  fidelizacion_activa: true 
+};
+
 export default function Clientes() {
+  const { config: branding } = useAppConfig();
   const [clientes, setClientes] = useState([]);
   const [search, setSearch] = useState('');
   const [filtroNivel, setFiltroNivel] = useState('Todos');
   const [filtroEstado, setFiltroEstado] = useState('Todos');
-  const [viewMode, setViewMode] = useState('grid');
+  const [filtroBeneficio, setFiltroBeneficio] = useState('Todos');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [modal, setModal] = useState(null);
   const [detalle, setDetalle] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [modal, setModal] = useState(null); 
+  const [configModal, setConfigModal] = useState(false);
+  const [campaignModal, setCampaignModal] = useState(null);
+  const [campaignMessage, setCampaignMessage] = useState('');
+  const [campaignTemplates, setCampaignTemplates] = useState({});
+  const [campaignHistory, setCampaignHistory] = useState([]);
+  const [campaignDashboard, setCampaignDashboard] = useState(null);
+  const [campaignSegmentStats, setCampaignSegmentStats] = useState([]);
+  const [campaignTopCampaign, setCampaignTopCampaign] = useState(null);
+  const [campaignHistoryFilter, setCampaignHistoryFilter] = useState('Todos');
+  const [campaignVariables, setCampaignVariables] = useState([]);
+  const [campaignSending, setCampaignSending] = useState(false);
+  const [canManageFidelidadConfig, setCanManageFidelidadConfig] = useState(true);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [campana, setCampana] = useState({ clientes: [], total: 0, dias_inactividad: 15, cupon: '' });
-  const [campanaCumple, setCampanaCumple] = useState({ clientes: [], total: 0, cupon: '' });
-  const [segmentos, setSegmentos] = useState({ summary: {}, favoritos: [] });
-  const [sendingCampaign, setSendingCampaign] = useState(false);
-  const [sendingBirthdayCampaign, setSendingBirthdayCampaign] = useState(false);
+  const [fidelidadConfig, setFidelidadConfig] = useState({
+    monto_minimo_sello: 10000,
+    sellos_para_premio: 6,
+    premio_descripcion: '1 Pizza Muzzarella',
+    activo: true
+  });
+  const fileInputRef = useRef(null);
+  const sellosParaPremio = Math.max(1, Number(fidelidadConfig.sellos_para_premio) || 1);
+
+  const formatPedidoDate = (value) => {
+    if (!value) return 'Fecha sin registrar';
+    try {
+      return format(parseISO(value), 'dd MMM yyyy');
+    } catch {
+      return 'Fecha invalida';
+    }
+  };
+
+  const getDaysSince = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+  };
+
+  const getClienteEstado = (cliente) => {
+    if (cliente?.estado_segmento) return cliente.estado_segmento;
+    const dias = getDaysSince(cliente.ultima_compra);
+    if (dias == null) return 'nuevo';
+    if (dias >= 30) return 'en-riesgo';
+    if (dias >= 15) return 'por-reactivar';
+    return 'activo';
+  };
+
+  const getEstadoBadge = (cliente) => {
+    const estado = getClienteEstado(cliente);
+    if (estado === 'premio-listo') {
+      return { label: 'Premio listo', className: 'bg-emerald-50 text-emerald-600' };
+    }
+    if (estado === 'vip') {
+      return { label: 'VIP', className: 'bg-amber-50 text-amber-500' };
+    }
+    if (estado === 'recurrente') {
+      return { label: 'Recurrente', className: 'bg-blue-50 text-[#5D87FF]' };
+    }
+    if (estado === 'perdido') {
+      return { label: 'Perdido', className: 'bg-gray-100 text-gray-500' };
+    }
+    if (estado === 'riesgo') {
+      return { label: 'En riesgo', className: 'bg-rose-50 text-rose-500' };
+    }
+    if (estado === 'perdido' || estado === 'riesgo' || estado === 'en-riesgo') {
+      return { label: 'En riesgo', className: 'bg-rose-50 text-rose-500' };
+    }
+    if (estado === 'por-reactivar') {
+      return { label: 'Por reactivar', className: 'bg-amber-50 text-amber-500' };
+    }
+    if (estado === 'nuevo') {
+      return { label: 'Nuevo', className: 'bg-sky-50 text-sky-500' };
+    }
+    return { label: 'Activo', className: 'bg-emerald-50 text-emerald-600' };
+  };
+
+  const getPrimaryPhoneLink = (telefono) => `tel:${String(telefono || '').replace(/\D/g, '')}`;
+
+  const buildActivityTimeline = (cliente) => {
+    const items = [];
+
+    if (cliente.recompensas_pendientes > 0) {
+      items.push({
+        id: 'reward-ready',
+        title: 'Premio disponible',
+        subtitle: `${cliente.recompensas_pendientes} recompensa${cliente.recompensas_pendientes > 1 ? 's' : ''} lista${cliente.recompensas_pendientes > 1 ? 's' : ''} para canjear`,
+        tone: 'emerald',
+      });
+    }
+
+    if (cliente.ultima_compra) {
+      const dias = getDaysSince(cliente.ultima_compra);
+      items.push({
+        id: 'last-order',
+        title: 'Ultima compra',
+        subtitle: `${formatPedidoDate(cliente.ultima_compra)}${dias != null ? ` · hace ${dias} día${dias === 1 ? '' : 's'}` : ''}`,
+        tone: 'blue',
+      });
+    }
+
+    if (cliente.fecha_nacimiento) {
+      const birthMonthDay = String(cliente.fecha_nacimiento).slice(5, 10);
+      const todayMonthDay = new Date().toISOString().slice(5, 10);
+      items.push({
+        id: 'birthday',
+        title: birthMonthDay === todayMonthDay ? 'Cumple hoy' : 'Cumple registrado',
+        subtitle: cliente.fecha_nacimiento,
+        tone: birthMonthDay === todayMonthDay ? 'amber' : 'sky',
+      });
+    }
+
+    if (!cliente.fidelizacion_activa) {
+      items.push({
+        id: 'loyalty-off',
+        title: 'Fidelizacion desactivada',
+        subtitle: 'Este cliente no esta acumulando beneficios en este momento',
+        tone: 'rose',
+      });
+    }
+
+    return items;
+  };
+
+  const getTimelineTone = (tone) => {
+    if (tone === 'emerald') return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+    if (tone === 'amber') return 'bg-amber-50 text-amber-500 border-amber-100';
+    if (tone === 'rose') return 'bg-rose-50 text-rose-500 border-rose-100';
+    if (tone === 'sky') return 'bg-sky-50 text-sky-500 border-sky-100';
+    return 'bg-blue-50 text-[#5D87FF] border-blue-100';
+  };
+
+  const getRecoveryMessage = (cliente) => {
+    if (!cliente) return '';
+    const estado = getClienteEstado(cliente);
+    if (estado === 'en-riesgo') {
+      return `Hola ${cliente.nombre || ''}, te extrañamos en ${branding.negocio_nombre || 'Modo Sabor'}. Queremos invitarte a volver con un beneficio especial.`;
+    }
+    if (estado === 'por-reactivar') {
+      return `Hola ${cliente.nombre || ''}, hace unos dias que no te vemos por ${branding.negocio_nombre || 'Modo Sabor'}. Si quieres, te reservamos tu promo favorita.`;
+    }
+    if (estado === 'premio-listo') {
+      return `Hola ${cliente.nombre || ''}, ya tienes un premio listo para canjear en ${branding.negocio_nombre || 'Modo Sabor'}. Cuando quieras, te ayudamos a aprovecharlo.`;
+    }
+    if (estado === 'vip') {
+      return `Hola ${cliente.nombre || ''}, gracias por ser parte de nuestros clientes VIP en ${branding.negocio_nombre || 'Modo Sabor'}. Tenemos un beneficio especial preparado para ti.`;
+    }
+    return `Hola ${cliente.nombre || ''}, gracias por seguir eligiendo ${branding.negocio_nombre || 'Modo Sabor'}. Tenemos novedades y beneficios para ti.`;
+  };
+
+  const getClienteCardCode = (cliente) => {
+    if (!cliente) return '';
+    return cliente.codigo_tarjeta || `MS-${String(cliente.id).padStart(6, '0')}-${Number(cliente.canjes_premio || 0) + 1}`;
+  };
+
+  const insertCampaignVariable = (key) => {
+    setCampaignMessage((prev) => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}{{${key}}}`);
+  };
 
   const cargar = async (query = '') => {
     setLoading(true);
     try {
-      setClientes(await api.get(`/clientes${query ? `?search=${encodeURIComponent(query)}` : ''}`));
-    } catch (error) {
-      toast.error(error?.error || 'Error al cargar clientes');
+      const [resClientes, resConfig] = await Promise.allSettled([
+        api.get(`/clientes${query ? `?search=${encodeURIComponent(query)}` : ''}`),
+        api.get('/fidelizacion/config')
+      ]);
+
+      if (resClientes.status !== 'fulfilled') {
+        throw resClientes.reason;
+      }
+
+      setClientes(resClientes.value);
+
+      if (resConfig.status === 'fulfilled') {
+        setFidelidadConfig(resConfig.value);
+        setCanManageFidelidadConfig(true);
+      } else {
+        setCanManageFidelidadConfig(false);
+      }
+    } catch {
+      toast.error('Error al cargar datos');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    const timer = setTimeout(() => cargar(search.trim()), 250);
-    return () => clearTimeout(timer);
-  }, [search]);
+  useEffect(() => { cargar(); }, []);
 
   useEffect(() => {
-    cargar();
-    api.get('/clientes/campanas/recompra').then(setCampana).catch(() => {});
-    api.get('/clientes/campanas/cumpleanos').then(setCampanaCumple).catch(() => {});
-    api.get('/clientes/segmentos').then(setSegmentos).catch(() => {});
+    const cargarCampanas = async () => {
+      try {
+        const res = await api.get('/clientes/campanas/personalizadas/config');
+        setCampaignTemplates(res.templates || {});
+        setCampaignHistory(res.history || []);
+        setCampaignDashboard(res.dashboard || null);
+        setCampaignSegmentStats(res.segmentos || []);
+        setCampaignTopCampaign(res.top_campaign || null);
+        setCampaignVariables(res.variables || []);
+      } catch {
+        // Mantener funcional el modulo aunque falle la carga secundaria.
+      }
+    };
+    cargarCampanas();
   }, []);
 
-  const clientesUi = useMemo(() => clientes.map(enrich), [clientes]);
-  const detalleReward = useMemo(() => rewards(detalle), [detalle]);
-  const detalleLevel = useMemo(() => levelProgress(detalle), [detalle]);
-  const detallePromo = useMemo(
-    () => promoRecommendation(detalle, detalleReward, campana, campanaCumple),
-    [detalle, detalleReward, campana, campanaCumple]
-  );
-
   const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return clientesUi.filter((cliente) => {
-      const matchSearch =
-        !term ||
-        cliente.nombre.toLowerCase().includes(term) ||
-        String(cliente.telefono || '').includes(term) ||
-        String(cliente.direccion || '').toLowerCase().includes(term);
-      const matchLevel = filtroNivel === 'Todos' || cliente.nivel === filtroNivel;
-      const matchState = filtroEstado === 'Todos' || cliente.estadoReal === filtroEstado;
-      return matchSearch && matchLevel && matchState;
+    const term = search.toLowerCase();
+    return clientes.filter(c => {
+      const estado = getClienteEstado(c);
+      const hasReward = Number(c.recompensas_pendientes || 0) > 0;
+      const fidelidadActiva = Boolean(c.fidelizacion_activa);
+
+      const matchesTerm =
+        c.nombre.toLowerCase().includes(term) ||
+        c.telefono.includes(term) ||
+        (c.codigo_tarjeta && c.codigo_tarjeta.toLowerCase().includes(term));
+
+      const matchesNivel = filtroNivel === 'Todos' || c.nivel === filtroNivel;
+      const matchesEstado =
+        filtroEstado === 'Todos' ||
+        (filtroEstado === 'VIP' && estado === 'vip') ||
+        (filtroEstado === 'Premio listo' && estado === 'premio-listo') ||
+        (filtroEstado === 'Recurrente' && estado === 'recurrente') ||
+        (filtroEstado === 'Activo' && estado === 'activo') ||
+        (filtroEstado === 'Por reactivar' && estado === 'por-reactivar') ||
+        (filtroEstado === 'En riesgo' && ['en-riesgo', 'riesgo'].includes(estado)) ||
+        (filtroEstado === 'Perdido' && estado === 'perdido') ||
+        (filtroEstado === 'Nuevo' && estado === 'nuevo');
+      const matchesBeneficio =
+        filtroBeneficio === 'Todos' ||
+        (filtroBeneficio === 'Con premio' && hasReward) ||
+        (filtroBeneficio === 'Fidelizacion activa' && fidelidadActiva) ||
+        (filtroBeneficio === 'Fidelizacion pausada' && !fidelidadActiva);
+
+      return matchesTerm && matchesNivel && matchesEstado && matchesBeneficio;
     });
-  }, [clientesUi, search, filtroNivel, filtroEstado]);
+  }, [clientes, search, filtroNivel, filtroEstado, filtroBeneficio]);
 
-  const stats = useMemo(
-    () => ({
-      total: clientesUi.length,
-      vip: clientesUi.filter((cliente) => ['Oro', 'Platino'].includes(cliente.nivel)).length,
-      riesgo: clientesUi.filter((cliente) => cliente.estadoReal === 'Riesgo').length,
-      regalos: clientesUi.filter((cliente) => rewards(cliente).pendientes > 0).length,
-      cumplen: clientesUi.filter((cliente) => cliente.cumpleEsteMes).length,
-      ltv: clientesUi.reduce((acc, cliente) => acc + Number(cliente.total_gastado || 0), 0),
-    }),
-    [clientesUi]
-  );
-  const exportarCSV = () => {
-    const csv = [
-      ['ID', 'Nombre', 'Telefono', 'Email', 'Nivel', 'Puntos', 'Sellos', 'Regalos pendientes', 'Gastado', 'Pedidos', 'Ultima compra', 'Estado', 'Direccion'].join(','),
-      ...filtered.map((cliente) =>
-        [
-          cliente.id,
-          `"${cliente.nombre || ''}"`,
-          `"${cliente.telefono || ''}"`,
-          `"${cliente.email || ''}"`,
-          `"${cliente.nivel || ''}"`,
-          cliente.puntos || 0,
-          rewards(cliente).sellos,
-          rewards(cliente).pendientes,
-          cliente.total_gastado || 0,
-          cliente.total_pedidos || 0,
-          `"${cliente.ultima_compra || ''}"`,
-          `"${cliente.estadoReal || ''}"`,
-          `"${cliente.direccion || ''}"`,
-        ].join(',')
-      ),
-    ].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `clientes_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success(`Exportados ${filtered.length} clientes`);
+  const stats = useMemo(() => ({
+    total: clientes.length,
+    vip: clientes.filter(c => getClienteEstado(c) === 'vip').length,
+    ltv: clientes.reduce((acc, c) => acc + Number(c.total_gastado || 0), 0)
+  }), [clientes]);
+
+  const segmentHighlights = useMemo(() => ([
+    {
+      key: 'premio-listo',
+      label: 'Premio listo',
+      count: clientes.filter(c => getClienteEstado(c) === 'premio-listo').length,
+      filter: 'Premio listo',
+      tone: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+      icon: Gift,
+      cta: 'Canjear y avisar'
+    },
+    {
+      key: 'vip',
+      label: 'VIP',
+      count: clientes.filter(c => getClienteEstado(c) === 'vip').length,
+      filter: 'VIP',
+      tone: 'bg-amber-50 text-amber-500 border-amber-100',
+      icon: Star,
+      cta: 'Beneficio premium'
+    },
+    {
+      key: 'riesgo',
+      label: 'En riesgo',
+      count: clientes.filter(c => ['riesgo', 'en-riesgo'].includes(getClienteEstado(c))).length,
+      filter: 'En riesgo',
+      tone: 'bg-rose-50 text-rose-500 border-rose-100',
+      icon: AlertTriangle,
+      cta: 'Recuperar'
+    },
+    {
+      key: 'nuevo',
+      label: 'Nuevos',
+      count: clientes.filter(c => getClienteEstado(c) === 'nuevo').length,
+      filter: 'Nuevo',
+      tone: 'bg-sky-50 text-sky-500 border-sky-100',
+      icon: UserRound,
+      cta: 'Dar bienvenida'
+    }
+  ]), [clientes]);
+
+  const getSegmentMessage = (segmento) => {
+    if (campaignTemplates?.[segmento]) return campaignTemplates[segmento];
+    return SEGMENT_CAMPAIGN_COPY[segmento]?.message(branding.negocio_nombre || 'Modo Sabor') || '';
   };
 
-  const abrirNuevo = () => {
-    setForm(EMPTY_FORM);
-    setModal('nuevo');
-  };
+  const getSegmentCandidates = (segmento) => clientes.filter((cliente) => {
+    const estado = getClienteEstado(cliente);
+    if (segmento === 'riesgo') return ['riesgo', 'en-riesgo'].includes(estado);
+    return estado === segmento;
+  }).filter((cliente) => cliente.telefono);
 
-  const abrirEditar = (cliente) => {
-    setForm({
-      nombre: cliente.nombre || '',
-      telefono: cliente.telefono || '',
-      email: cliente.email || '',
-      direccion: cliente.direccion || '',
-      notas: cliente.notas || '',
-      fecha_nacimiento: cliente.fecha_nacimiento || '',
-      tags: cliente.tags || [],
+  const launchSegmentCampaign = (segmento) => {
+    const candidates = getSegmentCandidates(segmento);
+
+    if (!candidates.length) {
+      toast.error('No hay clientes con telefono para ese segmento');
+      return;
+    }
+
+    setFiltroEstado(SEGMENT_CAMPAIGN_COPY[segmento]?.filter || 'Todos');
+    setCampaignMessage(getSegmentMessage(segmento));
+    setCampaignModal({
+      segment: segmento,
+      title: SEGMENT_CAMPAIGN_COPY[segmento]?.title || segmentHighlights.find((item) => item.key === segmento)?.label || 'Campana',
+      clients: candidates,
+      selectedIds: candidates.map((cliente) => cliente.id),
+      metrics: null,
     });
-    setModal(cliente);
   };
 
-  const cerrarModal = () => {
-    setModal(null);
-    setForm(EMPTY_FORM);
-  };
-
-  const guardar = async () => {
-    if (!form.nombre.trim()) return toast.error('El nombre es obligatorio');
-    if (!form.telefono.trim()) return toast.error('El telefono es obligatorio');
-    if (!form.direccion.trim()) return toast.error('La direccion es obligatoria');
-    setSaving(true);
-    const payload = {
-      nombre: form.nombre,
-      telefono: form.telefono,
-      email: form.email || '',
-      direccion: form.direccion,
-      notas: form.notas || '',
-      fecha_nacimiento: form.fecha_nacimiento || '',
-      tags: Array.isArray(form.tags) ? form.tags : [],
-    };
+  const saveCampaignTemplate = async () => {
+    if (!campaignModal?.segment) return;
     try {
-      if (modal === 'nuevo') await api.post('/clientes', payload);
-      else await api.put(`/clientes/${modal.id}`, payload);
-      toast.success(modal === 'nuevo' ? 'Cliente creado' : 'Cliente actualizado');
-      cerrarModal();
-      await cargar(search.trim());
-    } catch (error) {
-      toast.error(error?.error || 'Error al guardar');
+      await api.put(`/clientes/campanas/personalizadas/template/${campaignModal.segment}`, {
+        mensaje: campaignMessage,
+      });
+      setCampaignTemplates((prev) => ({ ...prev, [campaignModal.segment]: campaignMessage }));
+      toast.success('Plantilla guardada');
+    } catch (err) {
+      toast.error(err?.error || 'No se pudo guardar la plantilla');
+    }
+  };
+
+  const registerCampaignHistory = async () => {
+    if (!campaignModal?.segment) return;
+    const selectedIds = campaignModal.selectedIds || [];
+    if (!selectedIds.length) {
+      toast.error('Selecciona al menos un cliente');
+      return;
+    }
+
+    try {
+      const item = await api.post('/clientes/campanas/personalizadas/historial', {
+        segmento: campaignModal.segment,
+        titulo: campaignModal.title,
+        mensaje: campaignMessage,
+        cliente_ids: selectedIds,
+        total_clientes: selectedIds.length,
+      });
+      setCampaignHistory((prev) => [item, ...prev].slice(0, 12));
+      setCampaignModal((prev) => prev ? { ...prev, historyId: item.id, lastResult: item.ultimo_resultado || [], metrics: item.metricas || summarizeCampaignMetrics(item.ultimo_resultado, item.total_clientes) } : prev);
+      toast.success('Campaña registrada en historial');
+    } catch (err) {
+      toast.error(err?.error || 'No se pudo registrar la campaña');
+    }
+  };
+
+  const reopenCampaignFromHistory = (item) => {
+    const historyClientIds = Array.isArray(item.cliente_ids) ? item.cliente_ids.map((id) => Number(id)) : [];
+    const historyClients = clientes.filter((cliente) => historyClientIds.includes(Number(cliente.id)));
+    if (!historyClients.length) {
+      toast.error('No se encontraron clientes vigentes para esta campaña');
+      return;
+    }
+
+    setCampaignMessage(item.mensaje || getSegmentMessage(item.segmento));
+    setCampaignModal({
+      historyId: item.id,
+      segment: item.segmento,
+      title: item.titulo || item.segmento,
+      clients: historyClients,
+      selectedIds: historyClients.map((cliente) => cliente.id),
+      lastResult: item.ultimo_resultado || [],
+      metrics: item.metricas || summarizeCampaignMetrics(item.ultimo_resultado, item.total_clientes),
+    });
+  };
+
+  const sendCampaign = async () => {
+    if (!campaignModal?.selectedIds?.length) {
+      toast.error('Selecciona al menos un cliente');
+      return;
+    }
+
+    setCampaignSending(true);
+    try {
+      let historyId = campaignModal.historyId || null;
+
+      if (!historyId) {
+        const historyItem = await api.post('/clientes/campanas/personalizadas/historial', {
+          segmento: campaignModal.segment,
+          titulo: campaignModal.title,
+          mensaje: campaignMessage,
+          cliente_ids: campaignModal.selectedIds,
+          total_clientes: campaignModal.selectedIds.length,
+        });
+        historyId = historyItem.id;
+        setCampaignHistory((prev) => [historyItem, ...prev].slice(0, 12));
+        setCampaignModal((prev) => prev ? { ...prev, historyId, metrics: historyItem.metricas || summarizeCampaignMetrics(historyItem.ultimo_resultado, historyItem.total_clientes) } : prev);
+      }
+
+      const res = await api.post('/clientes/campanas/personalizadas/enviar', {
+        segmento: campaignModal.segment,
+        mensaje: campaignMessage,
+        cliente_ids: campaignModal.selectedIds,
+        history_id: historyId,
+      });
+
+      if (historyId) {
+        setCampaignHistory((prev) => prev.map((item) => item.id === historyId ? {
+          ...item,
+          enviados_ok: res.enviados_ok,
+          enviados_error: res.enviados_error,
+          ultimo_resultado: res.results,
+          metricas: res.metricas,
+        } : item));
+      }
+
+      setCampaignModal((prev) => prev ? { ...prev, historyId, lastResult: res.results, metrics: res.metricas } : prev);
+      toast.success(`Campaña procesada: ${res.enviados_ok} ok, ${res.enviados_error} con error`);
+    } catch (err) {
+      toast.error(err?.error || 'No se pudo procesar la campaña');
+    } finally {
+      setCampaignSending(false);
+    }
+  };
+
+  const getCardQuickAction = (cliente) => {
+    const estado = getClienteEstado(cliente);
+    if (estado === 'premio-listo') return { label: 'Avisar premio', href: `${getPrimaryPhoneLink(cliente.telefono)}?text=${encodeURIComponent(getRecoveryMessage(cliente))}`, icon: Gift };
+    if (estado === 'vip') return { label: 'Enviar VIP', href: `${getPrimaryPhoneLink(cliente.telefono)}?text=${encodeURIComponent(getRecoveryMessage(cliente))}`, icon: Star };
+    if (['riesgo', 'en-riesgo', 'perdido'].includes(estado)) return { label: 'Recuperar', href: `${getPrimaryPhoneLink(cliente.telefono)}?text=${encodeURIComponent(getRecoveryMessage(cliente))}`, icon: MessageCircle };
+    if (estado === 'nuevo') return { label: 'Bienvenida', href: `${getPrimaryPhoneLink(cliente.telefono)}?text=${encodeURIComponent(getRecoveryMessage(cliente))}`, icon: UserRound };
+    return { label: 'Contactar', href: `${getPrimaryPhoneLink(cliente.telefono)}?text=${encodeURIComponent(getRecoveryMessage(cliente))}`, icon: Phone };
+  };
+
+  const openCampaignPreview = () => {
+    if (!campaignModal?.clients?.length) {
+      toast.error('No hay clientes disponibles para esta campaña');
+      return;
+    }
+    const firstClient = campaignModal.clients.find((cliente) => campaignModal.selectedIds?.includes(cliente.id));
+    if (!firstClient) {
+      toast.error('Selecciona al menos un cliente');
+      return;
+    }
+    window.open(`${getPrimaryPhoneLink(firstClient.telefono)}?text=${encodeURIComponent(campaignMessage)}`, '_blank');
+  };
+
+  const abrirDetalle = async (c) => {
+    try {
+      const res = await api.get(`/clientes/${c.id}`);
+      setDetalle(res);
+    } catch { toast.error('Error'); }
+  };
+
+  const handleEdit = (c) => {
+    setForm({
+      id: c.id,
+      nombre: c.nombre || '',
+      telefono: c.telefono || '',
+      direccion: c.direccion || '',
+      fecha_nacimiento: c.fecha_nacimiento || '',
+      notas: c.notas || '',
+      avatar_url: c.avatar_url || '',
+      fidelizacion_activa: c.fidelizacion_activa
+    });
+    setModal('editar');
+    setDetalle(null);
+  };
+
+  const save = async () => {
+    if (!form.nombre.trim()) return toast.error('El nombre es obligatorio');
+    setSaving(true);
+    try {
+      if (modal === 'nuevo') {
+        await api.post('/clientes', form);
+        toast.success('Cliente creado correctamente');
+      } else {
+        await api.put(`/clientes/${form.id}`, form);
+        toast.success('Cliente actualizado');
+      }
+      setModal(null);
+      setForm(EMPTY_FORM);
+      cargar();
+    } catch (err) {
+      toast.error(err?.error || 'Error al guardar cliente');
     } finally {
       setSaving(false);
     }
   };
 
-  const abrirDetalle = async (cliente) => {
-    try {
-      setDetalle(enrich(await api.get(`/clientes/${cliente.id}`)));
-    } catch (error) {
-      toast.error(error?.error || 'Error al abrir cliente');
+  const saveConfig = async () => {
+    if (!canManageFidelidadConfig) {
+      toast.error('No tienes permisos para editar la configuracion de fidelidad');
+      return;
     }
-  };
-
-  const canjearRegalo = async () => {
-    if (!detalle) return;
+    setSaving(true);
     try {
-      setDetalle(enrich(await api.post(`/clientes/${detalle.id}/canjear-regalo`, {})));
-      toast.success('Regalo canjeado correctamente');
-      await cargar(search.trim());
-    } catch (error) {
-      toast.error(error?.error || 'No se pudo canjear el regalo');
-    }
-  };
-
-  const eliminar = async () => {
-    if (!confirmDelete) return;
-    try {
-      await api.delete(`/clientes/${confirmDelete.id}`);
-      toast.success('Cliente eliminado');
-      setDetalle((prev) => (prev?.id === confirmDelete.id ? null : prev));
-      setConfirmDelete(null);
-      await cargar(search.trim());
-    } catch (error) {
-      toast.error(error?.error || 'Error al eliminar');
-    }
-  };
-
-  const enviarCampanaRecompra = async (clienteIds) => {
-    if (!clienteIds.length) return;
-    setSendingCampaign(true);
-    try {
-      const result = await api.post('/clientes/campanas/recompra/enviar', { cliente_ids: clienteIds, cupon: campana.cupon });
-      const manual = result.results?.find((item) => item.mode === 'manual' && item.url);
-      if (manual?.url) {
-        window.open(manual.url, '_blank', 'noopener,noreferrer');
-      }
-      toast.success(`Campaña procesada para ${result.enviados || 0} cliente(s)`);
-      const updated = await api.get('/clientes/campanas/recompra');
-      setCampana(updated);
-    } catch (error) {
-      toast.error(error?.error || 'No se pudo enviar la campaña');
+      await api.put('/fidelizacion/config', fidelidadConfig);
+      toast.success('Configuración de fidelidad actualizada');
+      setConfigModal(false);
+    } catch (err) {
+      toast.error(err?.error || 'Error al guardar configuración');
     } finally {
-      setSendingCampaign(false);
+      setSaving(false);
     }
   };
 
-  const enviarCampanaCumple = async (clienteIds) => {
-    if (!clienteIds.length) return;
-    setSendingBirthdayCampaign(true);
+  const deleteCliente = async (id) => {
+    if (!window.confirm('¿Seguro deseas eliminar este cliente?')) return;
     try {
-      const result = await api.post('/clientes/campanas/cumpleanos/enviar', { cliente_ids: clienteIds, cupon: campanaCumple.cupon });
-      const manual = result.results?.find((item) => item.mode === 'manual' && item.url);
-      if (manual?.url) {
-        window.open(manual.url, '_blank', 'noopener,noreferrer');
-      }
-      toast.success(`Campaña de cumpleaños procesada para ${result.enviados || 0} cliente(s)`);
-      const updated = await api.get('/clientes/campanas/cumpleanos');
-      setCampanaCumple(updated);
-    } catch (error) {
-      toast.error(error?.error || 'No se pudo enviar la campaña de cumpleaños');
-    } finally {
-      setSendingBirthdayCampaign(false);
+      await api.delete(`/clientes/${id}`);
+      toast.success('Eliminado');
+      setDetalle(null);
+      cargar();
+    } catch { toast.error('Error al eliminar'); }
+  };
+
+  const canjearPremio = async (id) => {
+    if (!window.confirm('¿Confirmas el canje de la recompensa por sellos?')) return;
+    try {
+      const updated = await api.post(`/clientes/${id}/canjear-regalo`);
+      toast.success('¡Recompensa canjeada correctamente!');
+      setDetalle(updated);
+      cargar();
+    } catch (err) {
+      toast.error(err?.error || 'No se pudo canjear');
     }
   };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('imagen', file);
+    
+    try {
+      const res = await api.post('/productos/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setForm((prev) => ({ ...prev, avatar_url: res.url }));
+      toast.success('Imagen cargada');
+    } catch (err) {
+      toast.error('Error al subir imagen');
+    }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copiado al portapapeles');
+  };
+
+  const AvatarDisplay = ({ url, nombre, size = 'h-24 w-24' }) => {
+    if (url) {
+      return <img src={url} className={`${size} rounded-2xl object-cover shadow-lg`} alt={nombre} />;
+    }
+    return (
+      <div className={`${size} rounded-2xl flex items-center justify-center font-black text-3xl text-white shadow-lg bg-gray-400`}>
+        {nombre?.[0]?.toUpperCase() || <User />}
+      </div>
+    );
+  };
+
+  const detalleTimeline = detalle?.timeline?.length ? detalle.timeline : (detalle ? buildActivityTimeline(detalle) : []);
+  const detalleDirecciones = detalle?.direcciones || [];
+  const detalleDireccionPrincipal = detalleDirecciones.find((direccion) => direccion.principal) || detalleDirecciones[0] || null;
+  const detalleEstado = detalle ? getEstadoBadge(detalle) : null;
+  const detalleCardCode = detalle ? getClienteCardCode(detalle) : '';
+  const campaignMetrics = campaignModal?.metrics || summarizeCampaignMetrics(campaignModal?.lastResult, campaignModal?.selectedIds?.length || campaignModal?.clients?.length || 0);
+  const campaignDashboardStats = useMemo(
+    () => aggregateCampaignDashboard(campaignHistory, campaignDashboard || DEFAULT_CAMPAIGN_DASHBOARD),
+    [campaignDashboard, campaignHistory]
+  );
+  const filteredCampaignHistory = useMemo(
+    () => campaignHistory.filter((item) => matchesHistoryFilter(item, campaignHistoryFilter)),
+    [campaignHistory, campaignHistoryFilter]
+  );
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fffdf9_0%,#f8fafc_40%,#f7f8fb_100%)]">
-      <div className="mx-auto max-w-7xl px-6 py-8 xl:px-8">
-        <section className="rounded-[32px] border border-white/70 bg-[linear-gradient(135deg,rgba(255,247,237,0.95),rgba(255,255,255,0.92))] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-orange-600">CRM Visual</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Clientes</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-500">Fidelizacion automatica, niveles por compras entregadas y premios listos para canjear.</p>
+    <div className="min-h-screen bg-[#F4F7FB] px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-8">
+        
+        {/* Header Seccion */}
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-8 w-1 bg-[#5D87FF] rounded-full"></div>
+              <p className="text-sm font-black text-[#5D87FF] uppercase tracking-[0.3em]">CRM & Fidelización</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => cargar(search.trim())} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"><RefreshCw size={15} className={loading ? 'animate-spin' : ''} />Recargar</button>
-              <button type="button" onClick={exportarCSV} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"><Download size={15} />Exportar CSV</button>
-              <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1">
-                <button type="button" onClick={() => setViewMode('grid')} className={`inline-flex h-9 items-center gap-2 rounded-[14px] px-4 text-sm font-semibold transition ${viewMode === 'grid' ? 'bg-slate-950 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutGrid size={14} />Grid</button>
-                <button type="button" onClick={() => setViewMode('list')} className={`inline-flex h-9 items-center gap-2 rounded-[14px] px-4 text-sm font-semibold transition ${viewMode === 'list' ? 'bg-slate-950 text-white' : 'text-slate-500 hover:bg-slate-50'}`}><List size={14} />Lista</button>
-              </div>
-              <button type="button" onClick={abrirNuevo} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#f97316,#ea580c)] px-5 text-sm font-bold text-white shadow-[0_16px_30px_rgba(249,115,22,0.28)] transition hover:-translate-y-0.5"><Plus size={15} />Nuevo cliente</button>
-            </div>
+            <h1 className="text-3xl font-black text-gray-900 tracking-tight">Comunidad Modo Sabor</h1>
+            <p className="mt-1 text-gray-500 font-medium">Gestiona tu base de clientes y premia su lealtad.</p>
           </div>
-          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <Stat label="Total" value={stats.total} icon={UserRound} color="#f97316" />
-            <Stat label="VIP" value={stats.vip} icon={Star} color="#f59e0b" />
-            <Stat label="En riesgo" value={stats.riesgo} icon={ShieldAlert} color="#ef4444" />
-            <Stat label="Regalos" value={stats.regalos} icon={Gift} color="#22c55e" />
-            <Stat label="LTV" value={money(stats.ltv)} icon={Download} color="#3b82f6" />
-          </div>
-        </section>
-
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
-          <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Programa de fidelidad</p>
-            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Como suben de nivel y ganan premios</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {LEVEL_STEPS.map((step) => (
-                <div key={step.nivel} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{step.nivel}</p>
-                  <p className="mt-2 text-lg font-black tracking-tight text-slate-950">{step.nextMin ? `${step.min} - ${step.nextMin - 1} pts` : `${step.min}+ pts`}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{step.next ? `Sube a ${step.next} al llegar a ${step.nextMin} puntos.` : 'Es el nivel maximo del programa.'}</p>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge className="bg-orange-100 text-orange-700">1 punto cada $100 vendidos</Badge>
-              <Badge className="bg-emerald-100 text-emerald-700">1 regalo cada 6 compras entregadas</Badge>
-              <Badge className="bg-slate-100 text-slate-700">Los canjes descuentan 6 compras del progreso</Badge>
-            </div>
-          </div>
-
-          <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Promociones activas</p>
-            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Disparadores rapidos de CRM</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-700">Recompra</p>
-                <p className="mt-2 text-2xl font-black tracking-tight text-amber-950">{campana.total || 0}</p>
-                <p className="mt-1 text-xs leading-5 text-amber-900">Clientes listos para volver con cupón {campana.cupon || 'VOLVE10'}.</p>
-              </div>
-              <div className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-pink-700">Cumpleaños</p>
-                <p className="mt-2 text-2xl font-black tracking-tight text-pink-950">{campanaCumple.total || 0}</p>
-                <p className="mt-1 text-xs leading-5 text-pink-900">Clientes para felicitar este mes con campaña afectiva.</p>
-              </div>
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">Canje inmediato</p>
-                <p className="mt-2 text-2xl font-black tracking-tight text-emerald-950">{stats.regalos}</p>
-                <p className="mt-1 text-xs leading-5 text-emerald-900">Clientes con premio disponible para accionar hoy mismo.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
-          <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Segmentos CRM</p>
-            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Lectura rapida de la base</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {[
-                ['VIP', segmentos.summary?.vip || 0],
-                ['Riesgo', segmentos.summary?.riesgo || 0],
-                ['Perdidos', segmentos.summary?.perdidos || 0],
-                ['Inactivos', segmentos.summary?.inactivos || 0],
-                ['Recurrentes', segmentos.summary?.recurrentes || 0],
-                ['Cumple mes', segmentos.summary?.cumpleMes || 0],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</p>
-                  <p className="mt-2 text-2xl font-black tracking-tight text-slate-950">{value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Favoritos globales</p>
-            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Lo que mas tracciona recompra</h2>
-            <div className="mt-4 space-y-3">
-              {(segmentos.favoritos || []).slice(0, 6).map((item, index) => (
-                <div key={`${item.nombre}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div>
-                    <p className="font-semibold text-slate-950">{item.nombre}</p>
-                    <p className="text-xs text-slate-400">Apariciones en pedidos entregados</p>
-                  </div>
-                  <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700">{item.veces}</span>
-                </div>
-              ))}
-              {!(segmentos.favoritos || []).length ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-400">Todavia no hay favoritos detectados.</div> : null}
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-6 rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">CRM recompra</p>
-              <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Clientes para reactivar</h2>
-              <p className="mt-1 text-sm text-slate-500">Sin comprar hace {campana.dias_inactividad || 15} dias o mas. Cupón actual: <strong>{campana.cupon || 'VOLVE10'}</strong>.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => enviarCampanaRecompra(campana.clientes.slice(0, 10).map((cliente) => cliente.id))}
-              disabled={sendingCampaign || !campana.clientes.length}
-              className="inline-flex h-11 items-center justify-center rounded-2xl bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50"
+          
+          <div className="flex gap-3">
+            <button 
+              onClick={() => {
+                if (!canManageFidelidadConfig) {
+                  toast.error('No tienes permisos para ver la configuracion de fidelidad');
+                  return;
+                }
+                setConfigModal(true);
+              }} 
+              className={`h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-gray-100 text-gray-400 shadow-sm transition-all ${canManageFidelidadConfig ? 'hover:text-[#5D87FF]' : 'cursor-not-allowed opacity-60'}`}
+              title="Configuración de Fidelidad"
             >
-              {sendingCampaign ? 'Enviando...' : `Enviar campaña a ${Math.min(campana.clientes.length || 0, 10)}`}
+              <Settings size={20} />
+            </button>
+            <button 
+              onClick={() => { setForm(EMPTY_FORM); setModal('nuevo'); }} 
+              className="flex h-12 items-center gap-2 rounded-2xl bg-[#5D87FF] text-white px-6 text-sm font-black shadow-lg shadow-blue-100 active:scale-95 transition-all"
+            >
+              <Plus size={18} strokeWidth={3} />
+              NUEVO CLIENTE
+            </button>
+            <button onClick={() => cargar()} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-gray-100 text-gray-400 shadow-sm">
+              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {campana.clientes.slice(0, 6).map((cliente) => (
-              <div key={cliente.id} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-slate-950">{cliente.nombre}</p>
-                    <p className="mt-1 text-xs text-slate-400">{cliente.telefono}</p>
-                  </div>
-                  <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-bold text-amber-700">{cliente.dias_inactivo} dias</span>
-                </div>
-                <p className="mt-3 text-sm text-slate-500">Ultima compra: {cliente.ultima_compra ? format(parseISO(cliente.ultima_compra), 'dd/MM/yy', { locale: es }) : 'sin datos'}</p>
-                <p className="mt-1 text-sm text-slate-500">Gastado: {money(cliente.total_gastado)}</p>
-                <button
-                  type="button"
-                  onClick={() => enviarCampanaRecompra([cliente.id])}
-                  disabled={sendingCampaign}
-                  className="mt-4 inline-flex h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
-                >
-                  Enviar cupón
-                </button>
-              </div>
-            ))}
-            {!campana.clientes.length ? (
-              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
-                No hay clientes inactivos para campaña en este momento.
-              </div>
-            ) : null}
-          </div>
-        </section>
+        </div>
 
-        <section className="mt-6 rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">CRM cumpleaños</p>
-              <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Clientes que cumplen este mes</h2>
-              <p className="mt-1 text-sm text-slate-500">Ideal para disparar una campaña afectiva con cupón. Cupón actual: <strong>{campanaCumple.cupon || 'VOLVE10'}</strong>.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => enviarCampanaCumple(campanaCumple.clientes.slice(0, 10).map((cliente) => cliente.id))}
-              disabled={sendingBirthdayCampaign || !campanaCumple.clientes.length}
-              className="inline-flex h-11 items-center justify-center rounded-2xl bg-pink-600 px-5 text-sm font-bold text-white transition hover:bg-pink-700 disabled:opacity-50"
+        {/* Metricas VIP */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:gap-6">
+          <StatCard label="Clientes Totales" value={stats.total} icon={UserRound} tint="blue" />
+          <StatCard label="Miembros VIP" value={stats.vip} icon={Star} tint="amber" />
+          <StatCard label="Ventas Acumuladas" value={fmtMoney(stats.ltv)} icon={TrendingUp} tint="emerald" />
+        </div>
+
+        {/* Buscador y Filtros */}
+        <div className="rounded-[32px] bg-white p-6 shadow-sm border border-gray-100 flex flex-col gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input 
+              value={search} 
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por nombre, teléfono o código MS..." 
+              className={CONTROL + " pl-12 bg-[#F4F7FB]"}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <select 
+              value={filtroNivel} 
+              onChange={e => setFiltroNivel(e.target.value)}
+              className="h-12 px-6 rounded-2xl bg-[#F4F7FB] border-none text-sm font-bold text-gray-600 outline-none focus:ring-2 focus:ring-[#5D87FF]/20"
             >
-              {sendingBirthdayCampaign ? 'Enviando...' : `Felicitar a ${Math.min(campanaCumple.clientes.length || 0, 10)}`}
-            </button>
+              <option value="Todos">Todos los niveles</option>
+              {Object.keys(LEVEL_COLORS).map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+            <select
+              value={filtroEstado}
+              onChange={e => setFiltroEstado(e.target.value)}
+              className="h-12 px-6 rounded-2xl bg-[#F4F7FB] border-none text-sm font-bold text-gray-600 outline-none focus:ring-2 focus:ring-[#5D87FF]/20"
+            >
+              <option value="Todos">Todos los estados</option>
+              <option value="VIP">Solo VIP</option>
+              <option value="Premio listo">Premio listo</option>
+              <option value="Recurrente">Recurrentes</option>
+              <option value="Activo">Activos</option>
+              <option value="Por reactivar">Por reactivar</option>
+              <option value="En riesgo">En riesgo</option>
+              <option value="Perdido">Perdidos</option>
+              <option value="Nuevo">Nuevos</option>
+            </select>
+            <select
+              value={filtroBeneficio}
+              onChange={e => setFiltroBeneficio(e.target.value)}
+              className="h-12 px-6 rounded-2xl bg-[#F4F7FB] border-none text-sm font-bold text-gray-600 outline-none focus:ring-2 focus:ring-[#5D87FF]/20"
+            >
+              <option value="Todos">Todos los beneficios</option>
+              <option value="Con premio">Con premio listo</option>
+              <option value="Fidelizacion activa">Fidelizacion activa</option>
+              <option value="Fidelizacion pausada">Fidelizacion pausada</option>
+            </select>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {campanaCumple.clientes.slice(0, 6).map((cliente) => (
-              <div key={`cumple-${cliente.id}`} className="rounded-[24px] border border-pink-200 bg-pink-50/60 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-slate-950">{cliente.nombre}</p>
-                    <p className="mt-1 text-xs text-slate-400">{cliente.telefono}</p>
-                  </div>
-                  <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-pink-700">
-                    {cliente.fecha_nacimiento ? format(parseISO(cliente.fecha_nacimiento), 'dd/MM', { locale: es }) : 'Este mes'}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm text-slate-500">Total gastado: {money(cliente.total_gastado)}</p>
-                <p className="mt-1 text-sm text-slate-500">Pedidos: {cliente.total_pedidos || 0}</p>
-                <button
-                  type="button"
-                  onClick={() => enviarCampanaCumple([cliente.id])}
-                  disabled={sendingBirthdayCampaign}
-                  className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-pink-200 bg-white px-4 text-sm font-semibold text-pink-700 transition hover:bg-pink-50 disabled:opacity-50"
-                >
-                  <Cake size={15} />
-                  Enviar saludo
-                </button>
-              </div>
-            ))}
-            {!campanaCumple.clientes.length ? (
-              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-sm text-slate-500">
-                No hay cumpleaños cargados para este mes.
-              </div>
-            ) : null}
-          </div>
-        </section>
+        </div>
 
-        <section className="mt-6 rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="relative w-full xl:max-w-md"><Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre, telefono o direccion..." className={`${CONTROL} w-full pl-11`} /></div>
-            <div className="flex flex-col gap-3 sm:flex-row"><select value={filtroNivel} onChange={(e) => setFiltroNivel(e.target.value)} className={`${CONTROL} min-w-[150px]`}><option value="Todos">Todos los niveles</option><option value="Bronce">Bronce</option><option value="Plata">Plata</option><option value="Oro">Oro</option><option value="Platino">Platino</option></select><select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className={`${CONTROL} min-w-[150px]`}><option value="Todos">Todos los estados</option><option value="Activo">Activo</option><option value="VIP Activo">VIP Activo</option><option value="Riesgo">Riesgo</option><option value="Perdido">Perdido</option></select></div>
-          </div>
-          <div className="mt-5">{loading ? <div className={`grid gap-4 ${viewMode === 'grid' ? 'md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>{Array.from({ length: viewMode === 'grid' ? 6 : 3 }).map((_, i) => <div key={i} className="h-48 animate-pulse rounded-[24px] bg-slate-100" />)}</div> : filtered.length === 0 ? <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-16 text-center"><h3 className="text-lg font-black tracking-tight text-slate-950">No hay resultados</h3><p className="mt-2 text-sm text-slate-500">Proba otro filtro o crea un cliente nuevo.</p></div> : viewMode === 'grid' ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map((cliente) => { const reward = rewards(cliente); const danger = cliente.estadoReal === 'Perdido' || cliente.estadoReal === 'Riesgo'; return <article key={cliente.id} className="group flex h-full flex-col rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_16px_34px_rgba(15,23,42,0.06)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(15,23,42,0.10)]"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="flex h-14 w-14 items-center justify-center rounded-[18px] border border-white text-lg font-black text-slate-900 shadow-sm" style={{ backgroundColor: rgba(tone(cliente.nivel), 0.14) }}>{cliente.nombre.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}</div><div className="min-w-0"><h3 className="truncate text-lg font-black tracking-tight text-slate-950">{cliente.nombre}</h3><p className="mt-1 text-sm text-slate-500">{cliente.telefono || 'Sin telefono'}</p><div className="mt-2 flex flex-wrap gap-2"><span className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ backgroundColor: rgba(tone(cliente.nivel), 0.12), color: tone(cliente.nivel) }}>{cliente.nivel}</span><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${danger ? 'bg-rose-50 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>{cliente.estadoReal}</span></div></div></div><div className="flex gap-1 opacity-100 md:opacity-0 md:transition md:group-hover:opacity-100"><button type="button" onClick={() => abrirDetalle(cliente)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"><Eye size={15} /></button><button type="button" onClick={() => abrirEditar(cliente)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"><Pencil size={15} /></button></div></div><div className="mt-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-3 py-3 text-sm text-slate-500"><div className="flex items-center gap-2"><MapPin size={14} /><span className="truncate">{cliente.direccion || 'Direccion no cargada'}</span></div></div><div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 px-3 py-3"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Pedidos</p><p className="mt-1 text-xl font-black tracking-tight text-slate-950">{cliente.total_pedidos || 0}</p></div><div className="rounded-2xl bg-slate-50 px-3 py-3"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Gastado</p><p className="mt-1 text-xl font-black tracking-tight text-slate-950">{money(cliente.total_gastado)}</p></div></div><div className="mt-4 flex flex-wrap gap-2"><Badge className="bg-slate-100 text-slate-600">{cliente.puntos || 0} puntos</Badge><Badge className={reward.pendientes > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}>{reward.sellos}/6 sellos</Badge>{reward.pendientes > 0 && <Badge className="bg-emerald-50 text-emerald-700">{reward.pendientes} regalo{reward.pendientes === 1 ? '' : 's'} pendiente{reward.pendientes === 1 ? '' : 's'}</Badge>}{cliente.cumpleEsteMes && <Badge className="bg-pink-50 text-pink-700">Cumple este mes</Badge>}</div><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => abrirDetalle(cliente)} className="h-10 rounded-2xl bg-slate-950 text-sm font-bold text-white transition hover:bg-slate-800">Ver ficha</button><button type="button" onClick={() => setConfirmDelete(cliente)} className="h-10 rounded-2xl border border-rose-200 text-sm font-bold text-rose-600 transition hover:bg-rose-50">Eliminar</button></div></article>; })}</div> : <div className="overflow-hidden rounded-[24px] border border-slate-200"><div className="overflow-x-auto"><table className="min-w-full bg-white"><thead className="bg-slate-50"><tr className="text-left"><th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Cliente</th><th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Nivel</th><th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Gastado</th><th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Pedidos</th><th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Sellos</th><th className="px-5 py-4 text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Estado</th><th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Acciones</th></tr></thead><tbody>{filtered.map((cliente) => { const reward = rewards(cliente); return <tr key={cliente.id} className="border-b border-slate-100 hover:bg-slate-50/70"><td className="px-5 py-4"><div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white text-sm font-black text-slate-900" style={{ backgroundColor: rgba(tone(cliente.nivel), 0.14) }}>{cliente.nombre.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}</div><div><p className="font-bold text-slate-900">{cliente.nombre}</p><p className="text-xs text-slate-400">{cliente.telefono || 'Sin telefono'}</p></div></div></td><td className="px-5 py-4"><span className="rounded-full px-3 py-1.5 text-xs font-semibold" style={{ backgroundColor: rgba(tone(cliente.nivel), 0.12), color: tone(cliente.nivel) }}>{cliente.nivel}</span></td><td className="px-5 py-4 text-right font-black text-slate-950">{money(cliente.total_gastado)}</td><td className="px-5 py-4 text-center">{cliente.total_pedidos || 0}</td><td className="px-5 py-4 text-center"><Badge className={reward.pendientes > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}>{reward.sellos}/6</Badge></td><td className="px-5 py-4 text-center"><span className={`rounded-full px-3 py-1.5 text-xs font-bold ${cliente.estadoReal === 'Perdido' ? 'bg-rose-50 text-rose-700' : cliente.estadoReal === 'Riesgo' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{cliente.estadoReal}</span></td><td className="px-5 py-4 text-right"><div className="flex items-center justify-end gap-1"><button type="button" onClick={() => abrirDetalle(cliente)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"><Eye size={15} /></button><button type="button" onClick={() => abrirEditar(cliente)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"><Pencil size={15} /></button><button type="button" onClick={() => setConfirmDelete(cliente)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 text-rose-600 transition hover:bg-rose-50"><Trash2 size={15} /></button></div></td></tr>; })}</tbody></table></div></div>}</div>
-        </section>
+        <ClientesCampaignsSection
+          segmentHighlights={segmentHighlights}
+          setFiltroEstado={setFiltroEstado}
+          launchSegmentCampaign={launchSegmentCampaign}
+          campaignDashboardStats={campaignDashboardStats}
+          campaignSegmentStats={campaignSegmentStats}
+          campaignTopCampaign={campaignTopCampaign}
+          formatPedidoDate={formatPedidoDate}
+          fmtMoney={fmtMoney}
+          campaignModal={campaignModal}
+          getSegmentMessage={getSegmentMessage}
+          setCampaignMessage={setCampaignMessage}
+          sendCampaign={sendCampaign}
+          campaignSending={campaignSending}
+          setCampaignModal={setCampaignModal}
+          campaignVariables={campaignVariables}
+          insertCampaignVariable={insertCampaignVariable}
+          campaignMessage={campaignMessage}
+          copyToClipboard={copyToClipboard}
+          openCampaignPreview={openCampaignPreview}
+          saveCampaignTemplate={saveCampaignTemplate}
+          registerCampaignHistory={registerCampaignHistory}
+          getPrimaryPhoneLink={getPrimaryPhoneLink}
+          campaignMetrics={campaignMetrics}
+          campaignHistoryFilter={campaignHistoryFilter}
+          setCampaignHistoryFilter={setCampaignHistoryFilter}
+          campaignHistoryFilters={CAMPAIGN_HISTORY_FILTERS}
+          filteredCampaignHistory={filteredCampaignHistory}
+          reopenCampaignFromHistory={reopenCampaignFromHistory}
+        />
+
+        <ClientesGrid
+          filtered={filtered}
+          abrirDetalle={abrirDetalle}
+          AvatarDisplay={AvatarDisplay}
+          getEstadoBadge={getEstadoBadge}
+          fmtMoney={fmtMoney}
+          sellosParaPremio={sellosParaPremio}
+          getCardQuickAction={getCardQuickAction}
+          toast={toast}
+        />
       </div>
-      {detalle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={() => setDetalle(null)}>
-          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.26)]" onClick={(e) => e.stopPropagation()}>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="h-48" style={{ background: `linear-gradient(135deg, ${rgba(tone(detalle.nivel), 0.28)}, rgba(255,255,255,0.1))` }} />
-              <div className="-mt-10 px-5 pb-5">
-                <div className="flex items-start justify-between gap-3"><div className="flex h-20 w-20 items-center justify-center rounded-[24px] border border-white text-2xl font-black text-slate-900 shadow-sm" style={{ backgroundColor: rgba(tone(detalle.nivel), 0.14) }}>{detalle.nombre.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}</div><button type="button" onClick={() => setDetalle(null)} className="mt-2 flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"><X size={16} /></button></div>
-                <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{detalle.nombre}</h3>
-                <div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full px-3 py-1.5 text-xs font-semibold" style={{ backgroundColor: rgba(tone(detalle.nivel), 0.12), color: tone(detalle.nivel) }}>{detalle.nivel}</span><Badge className={detalle.estadoReal === 'Perdido' ? 'bg-rose-50 text-rose-700' : detalle.estadoReal === 'Riesgo' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-100 text-emerald-700'}>{detalle.estadoReal}</Badge>{detalle.cumpleEsteMes && <Badge className="bg-pink-50 text-pink-700">Cumple este mes</Badge>}</div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-4"><div className="rounded-2xl bg-slate-50 px-3 py-3"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Pedidos</p><p className="mt-1 font-semibold text-slate-900">{detalle.total_pedidos || 0}</p></div><div className="rounded-2xl bg-slate-50 px-3 py-3"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Gastado</p><p className="mt-1 font-semibold text-slate-900">{money(detalle.total_gastado)}</p></div><div className="rounded-2xl bg-slate-50 px-3 py-3"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Puntos</p><p className="mt-1 font-semibold text-slate-900">{detalle.puntos || 0}</p></div><div className="rounded-2xl bg-slate-50 px-3 py-3"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Sellos</p><p className="mt-1 font-semibold text-slate-900">{detalleReward.sellos}/6</p></div></div>
-                <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Contacto</p><div className="mt-3 space-y-3"><div className="flex items-center gap-2 text-sm text-slate-700"><Phone size={14} /> {detalle.telefono || 'Sin telefono'}</div><div className="flex items-center gap-2 text-sm text-slate-700"><MapPin size={14} /> {detalle.direccion || 'Sin direccion'}</div>{detalle.email && <div className="flex items-center gap-2 text-sm text-slate-700"><UserRound size={14} /> {detalle.email}</div>}</div></div>
-                <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Fidelizacion</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-4">
-                    <div className="rounded-2xl border border-white bg-white px-3 py-3 shadow-sm">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Nivel actual</p>
-                      <p className="mt-1 font-semibold text-slate-900">{detalle.nivel}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white px-3 py-3 shadow-sm">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Siguiente nivel</p>
-                      <p className="mt-1 font-semibold text-slate-900">{detalleLevel.next ? detalleLevel.next.nivel : 'Nivel maximo'}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white px-3 py-3 shadow-sm">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Frecuencia</p>
-                      <p className="mt-1 font-semibold text-slate-900">Cada {detalle.frecuencia_dias || 7} dias</p>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white px-3 py-3 shadow-sm">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Premios listos</p>
-                      <p className="mt-1 font-semibold text-slate-900">{detalleReward.pendientes}</p>
-                    </div>
+
+      {/* Modal Configuración Fidelidad */}
+      {configModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-gray-900/60 p-4 backdrop-blur-md" onClick={() => setConfigModal(false)}>
+           <div className="w-full max-w-lg rounded-[40px] bg-white p-8 shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-2xl font-black text-gray-900 tracking-tight uppercase">Configuración de Lealtad</h3>
+                <button onClick={() => setConfigModal(false)} className="rounded-full p-2 hover:bg-gray-100"><X size={24} className="text-gray-400" /></button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                  <div>
+                    <p className="text-sm font-black text-gray-900 uppercase">Sistema Activo</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase">Habilitar sellos y puntos globalmente</p>
                   </div>
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Progreso de nivel</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">
-                          {detalleLevel.next ? `Faltan ${detalleLevel.remaining} puntos para ${detalleLevel.next.nivel}` : 'Ya esta en el tope del programa'}
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{detalle.puntos || 0} pts</span>
-                    </div>
-                    <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${detalleLevel.progressPct}%`, backgroundColor: tone(detalle.nivel) }} />
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {Array.from({ length: 6 }).map((_, i) => <span key={i} className={`flex h-10 w-10 items-center justify-center rounded-full border text-sm font-bold ${i < detalleReward.sellos ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-400'}`}>{i < detalleReward.sellos ? 'OK' : i + 1}</span>)}
-                  </div>
-                  <p className="mt-3 text-sm text-slate-500">{detalleReward.pendientes > 0 ? `Tiene ${detalleReward.pendientes} regalo${detalleReward.pendientes === 1 ? '' : 's'} pendiente${detalleReward.pendientes === 1 ? '' : 's'} para canjear.` : `Le faltan ${6 - detalleReward.sellos} compra${6 - detalleReward.sellos === 1 ? '' : 's'} entregada${6 - detalleReward.sellos === 1 ? '' : 's'} para completar la tarjeta.`}</p>
-                  <div className={`mt-4 rounded-2xl border px-4 py-4 ${promoToneClasses(detallePromo?.tone)}`}>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em]">Promo sugerida</p>
-                    <p className="mt-1 font-semibold">{detallePromo?.title}</p>
-                    <p className="mt-1 text-sm leading-6 opacity-80">{detallePromo?.detail}</p>
-                  </div>
-                  <p className="mt-3 text-xs leading-5 text-slate-400">Los niveles, puntos, sellos y regalos se recalculan automaticamente desde pedidos entregados. Regla base: 1 punto cada $100 y 1 premio cada 6 compras.</p>
-                  {detalleReward.pendientes > 0 && <button type="button" onClick={canjearRegalo} className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 text-sm font-bold text-white transition hover:bg-emerald-700"><Gift size={15} />Canjear regalo</button>}
+                  <ToggleSwitch checked={fidelidadConfig.activo} onChange={v => setFidelidadConfig({...fidelidadConfig, activo: v})} color="blue" />
                 </div>
-                {detalle.notas && <div className="mt-5 rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">{detalle.notas}</div>}
-                <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4"><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Ultimos pedidos</p><div className="mt-3 space-y-2">{detalle.pedidos?.length ? detalle.pedidos.map((pedido) => <div key={pedido.id} className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm"><div><p className="font-semibold text-slate-900">#{pedido.numero || pedido.id}</p><p className="text-xs text-slate-400">{pedido.creado_en ? format(parseISO(pedido.creado_en), 'dd/MM/yy HH:mm', { locale: es }) : 'Sin fecha'}</p></div><div className="text-right"><p className="font-bold text-slate-900">{money(pedido.total)}</p><p className="text-xs capitalize text-slate-400">{pedido.estado}</p></div></div>) : <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-400">Todavia no tiene pedidos registrados.</div>}</div></div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Monto Mín. Sello ($)</label>
+                    <input type="number" value={fidelidadConfig.monto_minimo_sello} onChange={e => setFidelidadConfig({...fidelidadConfig, monto_minimo_sello: Number(e.target.value)})} className={CONTROL + " mt-1"} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Sellos p/ Premio</label>
+                    <input type="number" value={fidelidadConfig.sellos_para_premio} onChange={e => setFidelidadConfig({...fidelidadConfig, sellos_para_premio: Number(e.target.value)})} className={CONTROL + " mt-1"} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Descripción del Premio (Bases)</label>
+                  <textarea value={fidelidadConfig.premio_descripcion} onChange={e => setFidelidadConfig({...fidelidadConfig, premio_descripcion: e.target.value})} className={CONTROL + " mt-1 h-24 py-3 resize-none"} placeholder="Ej: 1 Pizza Muzzarella gratis" />
+                </div>
+
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                  <p className="text-[10px] font-black text-[#5D87FF] uppercase tracking-widest mb-1">Regla de Negocio</p>
+                  <p className="text-xs font-bold text-gray-600 leading-relaxed italic">
+                    "Los clientes sumarán 1 sello por cada compra mayor a {fmtMoney(fidelidadConfig.monto_minimo_sello)}. Al completar {fidelidadConfig.sellos_para_premio} sellos, ganarán: {fidelidadConfig.premio_descripcion}."
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-8 flex gap-3">
+                <button onClick={() => setConfigModal(false)} className="flex-1 h-12 rounded-2xl border border-gray-200 text-xs font-black text-gray-500 uppercase">Cancelar</button>
+                <button onClick={saveConfig} disabled={saving} className="flex-[2] h-12 rounded-2xl bg-[#5D87FF] text-white text-xs font-black uppercase shadow-lg shadow-blue-100">
+                  {saving ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Modal Alta/Edición Cliente - CORREGIDO CON SCROLL Y Z-INDEX */}
+      {modal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-900/60 p-4 backdrop-blur-md" onClick={() => setModal(null)}>
+          <div className="w-full max-w-xl max-h-[90vh] flex flex-col rounded-[40px] bg-white shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            {/* Header del Modal */}
+            <div className="shrink-0 p-8 pb-4 flex items-center justify-between border-b border-gray-50">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-6 w-1 bg-[#5D87FF] rounded-full"></div>
+                  <p className="text-xs font-black text-[#5D87FF] uppercase tracking-[0.2em]">{modal === 'nuevo' ? 'Nuevo Registro' : 'Editar Ficha'}</p>
+                </div>
+                <h3 className="text-2xl font-black text-gray-900 tracking-tight uppercase">Datos del Cliente</h3>
+              </div>
+              <button onClick={() => setModal(null)} className="rounded-full p-2 hover:bg-gray-100 transition-colors">
+                <X size={24} className="text-gray-400" />
+              </button>
+            </div>
+
+            {/* Contenido Scrollable */}
+            <div className="flex-1 overflow-y-auto p-8 pt-4 space-y-6 no-scrollbar">
+              {/* Selector de Avatar */}
+              <div className="flex flex-col items-center gap-4">
+                <div className="relative group">
+                  <AvatarDisplay url={form.avatar_url} nombre={form.nombre} size="h-28 w-24" />
+                  <button 
+                    onClick={() => fileInputRef.current.click()}
+                    className="absolute -bottom-2 -right-2 h-10 w-10 bg-[#5D87FF] text-white rounded-xl border-4 border-white shadow-lg flex items-center justify-center hover:bg-[#4570EA] transition-all active:scale-90"
+                  >
+                    <Camera size={18} />
+                  </button>
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                </div>
+                
+                <div className="space-y-2 w-full text-center">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">O selecciona uno predeterminado</p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {LOCAL_AVATARS.map((av, idx) => (
+                      <button 
+                        key={idx} 
+                        onClick={() => setForm({ ...form, avatar_url: av })}
+                        className={`h-10 w-10 rounded-xl overflow-hidden border-2 transition-all ${form.avatar_url === av ? 'border-[#5D87FF] scale-110 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                      >
+                        <img src={av} className="h-full w-full object-cover" alt="avatar" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nombre Completo</label>
+                  <input 
+                    value={form.nombre} 
+                    onChange={e => setForm({ ...form, nombre: e.target.value })} 
+                    placeholder="Ej: Juan Perez" 
+                    className={CONTROL + " mt-1"} 
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Teléfono</label>
+                    <input 
+                      value={form.telefono} 
+                      onChange={e => setForm({ ...form, telefono: e.target.value })} 
+                      placeholder="Ej: 1122334455" 
+                      className={CONTROL + " mt-1"} 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cumpleaños</label>
+                    <input 
+                      type="date"
+                      value={form.fecha_nacimiento} 
+                      onChange={e => setForm({ ...form, fecha_nacimiento: e.target.value })} 
+                      className={CONTROL + " mt-1"} 
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Dirección Principal</label>
+                  <input 
+                    value={form.direccion} 
+                    onChange={e => setForm({ ...form, direccion: e.target.value })} 
+                    placeholder="Ej: Calle Falsa 123" 
+                    className={CONTROL + " mt-1"} 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Notas Internas</label>
+                  <textarea 
+                    value={form.notas} 
+                    onChange={e => setForm({ ...form, notas: e.target.value })} 
+                    placeholder="Gustos, preferencias, referencias..." 
+                    className={CONTROL + " mt-1 h-24 py-3 resize-none"} 
+                  />
+                </div>
               </div>
             </div>
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:justify-end"><button type="button" onClick={() => setDetalle(null)} className="h-11 rounded-2xl border border-slate-200 px-5 text-sm font-bold text-slate-600 transition hover:bg-slate-50">Cerrar</button><button type="button" onClick={() => { const current = detalle; setDetalle(null); abrirEditar(current); }} className="h-11 rounded-2xl bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800">Editar cliente</button></div>
+
+            {/* Footer del Modal (Fijo) */}
+            <div className="shrink-0 p-8 pt-4 border-t border-gray-50 flex gap-3">
+              <button onClick={() => setModal(null)} className="flex-1 h-14 rounded-2xl border border-gray-200 text-sm font-black text-gray-500 uppercase tracking-widest hover:bg-gray-50 transition-all">
+                CANCELAR
+              </button>
+              <button 
+                onClick={save} 
+                disabled={saving} 
+                className="flex-[2] h-14 rounded-2xl bg-[#5D87FF] text-sm font-black text-white uppercase tracking-widest shadow-lg shadow-blue-100 hover:bg-[#4570EA] active:scale-95 transition-all disabled:opacity-50"
+              >
+                {saving ? 'GUARDANDO...' : 'GUARDAR CAMBIOS'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={cerrarModal}>
-          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.26)]" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{modal === 'nuevo' ? 'Nuevo cliente' : 'Editar cliente'}</p><h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">{modal === 'nuevo' ? 'Crear cliente' : 'Ajustar cliente'}</h2></div><button type="button" onClick={cerrarModal} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 transition hover:bg-slate-50"><X size={16} /></button></div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5"><div className="mb-4 rounded-[22px] border border-orange-100 bg-orange-50/70 px-4 py-3 text-sm text-orange-900"><p className="font-bold">Fidelizacion automatica</p><p className="mt-1 leading-6 text-orange-800">Nivel, puntos, sellos, regalos y frecuencia se calculan automaticamente en base a pedidos entregados. Desde aca solo editas datos del cliente.</p></div><div className="grid gap-4 md:grid-cols-2"><input value={form.nombre} onChange={(e) => setForm((prev) => ({ ...prev, nombre: e.target.value }))} placeholder="Nombre completo" className={`${CONTROL} w-full`} /><input value={form.telefono} onChange={(e) => setForm((prev) => ({ ...prev, telefono: e.target.value }))} placeholder="Telefono" className={`${CONTROL} w-full`} /><input value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" className={`${CONTROL} w-full`} /><input type="date" value={form.fecha_nacimiento} onChange={(e) => setForm((prev) => ({ ...prev, fecha_nacimiento: e.target.value }))} className={`${CONTROL} w-full`} /><textarea value={form.direccion} onChange={(e) => setForm((prev) => ({ ...prev, direccion: e.target.value }))} rows={3} placeholder="Direccion" className="min-h-[112px] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-100 md:col-span-2" /><textarea value={form.notas} onChange={(e) => setForm((prev) => ({ ...prev, notas: e.target.value }))} rows={4} placeholder="Notas internas, alergias, referencias o comentarios utiles" className="min-h-[128px] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-100 md:col-span-2" /></div></div>
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:justify-end"><button type="button" onClick={cerrarModal} className="h-11 rounded-2xl border border-slate-200 px-5 text-sm font-bold text-slate-600 transition hover:bg-slate-50">Cancelar</button><button type="button" onClick={guardar} disabled={saving} className="h-11 rounded-2xl bg-[linear-gradient(135deg,#f97316,#ea580c)] px-5 text-sm font-bold text-white shadow-[0_16px_26px_rgba(249,115,22,0.24)] transition hover:-translate-y-0.5 disabled:opacity-60">{saving ? 'Guardando...' : modal === 'nuevo' ? 'Crear cliente' : 'Guardar cambios'}</button></div>
-          </div>
-        </div>
-      )}
+      {/* Modal Detalle Cliente + TARJETA DIGITAL DE FIDELIDAD */}
+      {detalle && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm" onClick={() => setDetalle(null)}>
+          <div className="w-full max-w-2xl max-h-[95vh] overflow-y-auto rounded-[40px] bg-white shadow-2xl animate-in zoom-in-95 duration-200 no-scrollbar" onClick={e => e.stopPropagation()}>
+            <div className="h-32 bg-gradient-to-r from-[#5D87FF] to-[#49BEFF]" />
+            <div className="px-8 pb-8">
+              <div className="flex justify-between items-end -mt-12 mb-6">
+                <div className="h-24 w-24 rounded-[32px] border-4 border-white bg-gray-100 shadow-lg overflow-hidden">
+                  <AvatarDisplay url={detalle.avatar_url} nombre={detalle.nombre} size="w-full h-full" />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => window.open(getPrimaryPhoneLink(detalle.telefono), '_blank')} className="h-11 w-11 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-[#13DEB9] shadow-sm hover:bg-emerald-50"><MessageCircle size={20} /></button>
+                  <button onClick={() => copyToClipboard(detalle.telefono || '')} className="h-11 w-11 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-[#5D87FF] shadow-sm hover:bg-blue-50"><Copy size={18} /></button>
+                  <button onClick={() => handleEdit(detalle)} className="h-11 px-6 rounded-2xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-gray-800 transition-all">EDITAR</button>
+                  <button onClick={() => deleteCliente(detalle.id)} className="h-11 w-11 rounded-2xl bg-rose-50 text-rose-500 border border-rose-100 flex items-center justify-center hover:bg-rose-100 transition-all"><Trash2 size={18} /></button>
+                </div>
+              </div>
 
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={() => setConfirmDelete(null)}>
-          <div className="w-full max-w-md rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_24px_70px_rgba(15,23,42,0.26)]" onClick={(e) => e.stopPropagation()}>
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-600"><AlertTriangle size={28} /></div>
-            <h3 className="mt-4 text-center text-xl font-black tracking-tight text-slate-950">Eliminar cliente</h3>
-            <p className="mt-2 text-center text-sm leading-6 text-slate-500">Se eliminara a "{confirmDelete.nombre}" de la base de clientes. Esta accion no se puede deshacer.</p>
-            <div className="mt-6 flex gap-2"><button type="button" onClick={() => setConfirmDelete(null)} className="h-11 flex-1 rounded-2xl border border-slate-200 text-sm font-bold text-slate-600 transition hover:bg-slate-50">Cancelar</button><button type="button" onClick={eliminar} className="h-11 flex-1 rounded-2xl bg-rose-600 text-sm font-bold text-white transition hover:bg-rose-700">Eliminar</button></div>
+              <div className="mb-8 relative group">
+                <div className="absolute -inset-1 bg-gradient-to-r from-[#5D87FF] to-[#49BEFF] rounded-[32px] blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+                <div className="relative bg-white border border-gray-100 rounded-[32px] p-6 shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      {branding.negocio_logo ? (
+                        <img src={branding.negocio_logo} className="h-10 w-10 object-contain" alt="logo" />
+                      ) : (
+                        <div className="h-10 w-10 bg-[#5D87FF] rounded-xl flex items-center justify-center text-white font-black italic">MS</div>
+                      )}
+                      <div>
+                        <p className="text-[10px] font-black text-[#5D87FF] uppercase tracking-[0.2em] leading-none">Tarjeta de Lealtad</p>
+                        <p className="text-lg font-black text-gray-900 tracking-tight leading-none mt-1 uppercase">{branding.negocio_nombre || 'Modo Sabor'}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">N° Tarjeta</p>
+                      <p className="text-sm font-mono font-bold text-gray-800 leading-none mt-1">MS-{String(detalle.id).padStart(6, '0')}-{detalle.canjes_premio + 1}</p>
+                    </div>
+                  </div>
+
+                  <div
+                    className="grid gap-3 mb-6"
+                    style={{ gridTemplateColumns: `repeat(${sellosParaPremio + 1}, minmax(0, 1fr))` }}
+                  >
+                    {Array.from({ length: sellosParaPremio }, (_, index) => index + 1).map((num) => {
+                      const isStamped = (detalle.sellos_actuales || 0) >= num;
+                      return (
+                        <div key={num} className="flex flex-col items-center gap-2">
+                          <div className={`h-12 w-12 rounded-full border-2 border-dashed flex items-center justify-center transition-all duration-500 ${isStamped ? 'border-[#5D87FF] bg-blue-50 text-[#5D87FF] scale-110 shadow-lg' : 'border-gray-200 text-gray-200'}`}>
+                            {isStamped ? <CheckCircle2 size={24} strokeWidth={3} /> : <div className="h-2 w-2 rounded-full bg-gray-100" />}
+                          </div>
+                          <span className={`text-[8px] font-black uppercase ${isStamped ? 'text-[#5D87FF]' : 'text-gray-300'}`}>{num}</span>
+                        </div>
+                      );
+                    })}
+                    <div className="flex flex-col items-center gap-2">
+                      <div className={`h-12 w-12 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${detalle.recompensas_pendientes > 0 ? 'bg-[#13DEB9] border-emerald-100 text-white animate-bounce shadow-xl' : 'border-[#13DEB9]/20 text-[#13DEB9]/20 bg-[#13DEB9]/5'}`}>
+                        <Gift size={24} strokeWidth={3} />
+                      </div>
+                      <span className="text-[8px] font-black uppercase text-[#13DEB9]">GRATIS</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-50">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-black text-gray-800 truncate uppercase tracking-tight">{detalle.nombre}</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{detalle.telefono}</p>
+                    </div>
+                    {detalle.recompensas_pendientes > 0 && (
+                      <button 
+                        onClick={() => canjearPremio(detalle.id)}
+                        className="h-10 px-6 rounded-xl bg-[#13DEB9] text-white text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-100 hover:bg-[#0EB795] active:scale-95 transition-all"
+                      >
+                        CANJEAR AHORA
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-8 lg:grid-cols-4">
+                <div className="rounded-[24px] bg-[#F4F7FB] p-5 text-center">
+                  <Star className="mx-auto text-amber-500 mb-2" size={24} fill="#FFAE1F" />
+                  <p className="text-[10px] font-black text-gray-400 uppercase">Puntos</p>
+                  <p className="text-lg font-black text-gray-800">{detalle.puntos || 0} pts</p>
+                </div>
+                <div className="rounded-[24px] bg-[#F4F7FB] p-5 text-center">
+                  <CreditCard className="mx-auto text-[#5D87FF] mb-2" size={24} />
+                  <p className="text-[10px] font-black text-gray-400 uppercase">Total Canjes</p>
+                  <p className="text-lg font-black text-gray-800">{detalle.canjes_premio || 0}</p>
+                </div>
+                <div className="rounded-[24px] bg-[#F4F7FB] p-5 text-center">
+                  <History className="mx-auto text-rose-500 mb-2" size={24} />
+                  <p className="text-[10px] font-black text-gray-400 uppercase">Frecuencia</p>
+                  <p className="text-lg font-black text-gray-800">~{detalle.frecuencia_dias || 7} días</p>
+                </div>
+                <div className="rounded-[24px] bg-[#F4F7FB] p-5 text-center">
+                  <AlertTriangle className="mx-auto text-[#5D87FF] mb-2" size={24} />
+                  <p className="text-[10px] font-black text-gray-400 uppercase">Estado CRM</p>
+                  <p className="text-lg font-black text-gray-800">{getEstadoBadge(detalle).label}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 mb-8 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="space-y-4">
+                  <div className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-5">
+                      <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Ficha 360</h4>
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${detalleEstado.className}`}>
+                        {detalleEstado.label}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="rounded-[24px] bg-[#F4F7FB] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Contacto principal</p>
+                        <div className="mt-3 flex items-center gap-3">
+                          <div className="h-11 w-11 rounded-2xl bg-white flex items-center justify-center text-[#13DEB9] shadow-sm">
+                            <Phone size={18} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-gray-900 truncate">{detalle.telefono || 'Sin telefono'}</p>
+                            <button onClick={() => window.open(getPrimaryPhoneLink(detalle.telefono), '_blank')} className="text-[10px] font-black uppercase tracking-widest text-[#5D87FF] hover:underline">
+                              Llamar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="rounded-[24px] bg-[#F4F7FB] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Cumpleanos</p>
+                        <div className="mt-3 flex items-center gap-3">
+                          <div className="h-11 w-11 rounded-2xl bg-white flex items-center justify-center text-amber-500 shadow-sm">
+                            <Cake size={18} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-gray-900 truncate">{detalle.fecha_nacimiento || 'No registrado'}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Dato para campanas y beneficios</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="rounded-[24px] bg-[#F4F7FB] p-4 sm:col-span-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Direccion principal</p>
+                        <div className="mt-3 flex items-start gap-3">
+                          <div className="h-11 w-11 rounded-2xl bg-white flex items-center justify-center text-[#5D87FF] shadow-sm shrink-0">
+                            <MapPin size={18} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-gray-900">{detalleDireccionPrincipal?.direccion || detalle.direccion || 'Sin direccion cargada'}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                              {detalleDireccionPrincipal?.etiqueta || 'Principal'}
+                              {detalleDireccionPrincipal?.referencia ? ` · ${detalleDireccionPrincipal.referencia}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {detalle.notas ? (
+                      <div className="mt-4 rounded-[24px] border border-dashed border-gray-200 bg-gray-50 px-4 py-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Notas internas</p>
+                        <p className="mt-2 text-sm font-medium text-gray-700">{detalle.notas}</p>
+                      </div>
+                    ) : null}
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <button onClick={() => copyToClipboard(detalleCardCode)} className="flex items-center justify-center gap-2 rounded-[20px] border border-gray-100 bg-[#F4F7FB] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-700 transition-all hover:border-blue-100 hover:text-[#5D87FF]">
+                        <QrCode size={16} />
+                        Copiar tarjeta
+                      </button>
+                      <button onClick={() => copyToClipboard(getRecoveryMessage(detalle))} className="flex items-center justify-center gap-2 rounded-[20px] border border-gray-100 bg-[#F4F7FB] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-700 transition-all hover:border-emerald-100 hover:text-[#13DEB9]">
+                        <Copy size={16} />
+                        Copiar mensaje
+                      </button>
+                      <button onClick={() => copyToClipboard(getRecoveryMessage(detalle))} className="flex items-center justify-center gap-2 rounded-[20px] border border-gray-100 bg-[#F4F7FB] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-700 transition-all hover:border-emerald-100 hover:text-[#13DEB9]">
+                        <ExternalLink size={16} />
+                        Copiar mensaje CRM
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm">
+                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mb-4">Actividad y Retencion</h4>
+                    <div className="space-y-3">
+                      {detalleTimeline.length > 0 ? detalleTimeline.map((item) => (
+                        <div key={item.id} className={`rounded-[24px] border px-4 py-4 ${getTimelineTone(item.tone)}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-black uppercase tracking-widest">{item.title}</p>
+                              <p className="mt-1 text-sm font-bold leading-relaxed">{item.subtitle}</p>
+                            </div>
+                            {item.fecha ? (
+                              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest opacity-70">
+                                {formatPedidoDate(item.fecha)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-[24px] border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-center">
+                          <p className="text-xs font-black uppercase tracking-widest text-gray-400">Sin actividad destacada</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[32px] border border-gray-100 bg-white p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Direcciones</h4>
+                      <span className="text-[9px] font-black text-[#5D87FF] uppercase tracking-widest">{detalleDirecciones.length || 0} cargadas</span>
+                    </div>
+                    <div className="space-y-3">
+                      {detalleDirecciones.length > 0 ? detalleDirecciones.map((direccion) => (
+                        <div key={direccion.id} className="rounded-[24px] bg-[#F4F7FB] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs font-black uppercase tracking-widest text-gray-800">{direccion.etiqueta || 'Direccion'}</p>
+                            {direccion.principal ? (
+                              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-[#5D87FF]">Principal</span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-sm font-bold text-gray-700">{direccion.direccion}</p>
+                          {direccion.referencia ? <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">{direccion.referencia}</p> : null}
+                        </div>
+                      )) : (
+                        <p className="text-center py-4 text-xs font-bold text-gray-400 uppercase bg-gray-50 rounded-2xl border border-dashed border-gray-200">Sin direcciones registradas</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Últimos Pedidos</h4>
+                  <button className="text-[9px] font-black text-[#5D87FF] uppercase tracking-widest hover:underline">Ver Historial</button>
+                </div>
+                {detalle.pedidos?.length > 0 ? detalle.pedidos.slice(0, 3).map(p => (
+                  <div key={p.id} className="flex items-center justify-between p-4 rounded-2xl border border-gray-50 bg-gray-50/50 hover:bg-white hover:border-gray-100 transition-all cursor-default">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-white flex items-center justify-center text-xs font-black shadow-sm border border-gray-50">#{p.numero}</div>
+                      <div>
+                        <p className="text-xs font-black text-gray-800">{formatPedidoDate(p.creado_en)}</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase leading-none">{p.estado}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-black text-gray-900">{fmtMoney(p.total)}</p>
+                      <p className="text-[9px] font-bold text-[#5D87FF] uppercase tracking-tighter leading-none">+{(p.total * 0.05).toFixed(0)} pts</p>
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-center py-4 text-xs font-bold text-gray-400 uppercase bg-gray-50 rounded-2xl border border-dashed border-gray-200">Sin pedidos registrados</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+
+

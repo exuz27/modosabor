@@ -1,10 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-* { box-sizing: border-box; }
-body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: #f1f5f9; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+:root {
+  /* Colores primarios */
+  --color-primary-50: #EEF2FF;
+  --color-primary-100: #E0E7FF;
+  --color-primary-500: #6366F1;
+  --color-primary-600: #4F46E5;
+  --color-primary-700: #4338CA;
+  
+  /* Colores secundarios */
+  --color-secondary-500: #A855F7;
+  --color-secondary-600: #8B5CF6;
+  
+  /* Grises */
+  --color-gray-50: #F8FAFC;
+  --color-gray-100: #F1F5F9;
+  --color-gray-200: #E2E8F0;
+  --color-gray-400: #94A3B8;
+  --color-gray-600: #475569;
+  --color-gray-800: #1E293B;
+  --color-gray-900: #0F172A;
+  
+  /* Sombras */
+  --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 0 20px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.02);
+  --shadow-elevated: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  
+  html {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  body {
+    margin: 0;
+    background-color: var(--color-gray-50);
+    color: var(--color-gray-800);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer components {
+  /* Cards modernas */
+  .card {
+    @apply bg-white rounded-2xl shadow-card border border-gray-100;
+  }
+  
+  .card-hover {
+    @apply card transition-all duration-200 hover:shadow-soft hover:-translate-y-0.5;
+  }
+  
+  /* Botones primarios */
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-5 py-2.5 
+           bg-primary-600 text-white font-semibold rounded-xl
+           transition-all duration-200
+           hover:bg-primary-700 hover:shadow-lg hover:shadow-primary-500/25
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
+           active:scale-95;
+  }
+  
+  /* Botones secundarios */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-5 py-2.5 
+           bg-white text-gray-700 font-semibold rounded-xl border border-gray-200
+           transition-all duration-200
+           hover:bg-gray-50 hover:border-gray-300
+           focus:outline-none focus:ring-2 focus:ring-gray-200
+           active:scale-95;
+  }
+  
+  /* Botones de icono */
+  .btn-icon {
+    @apply inline-flex items-center justify-center p-2.5
+           rounded-xl transition-all duration-200
+           hover:bg-gray-100
+           focus:outline-none focus:ring-2 focus:ring-gray-200;
+  }
+  
+  /* Inputs modernos */
+  .input-modern {
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 
+           bg-white text-gray-800 placeholder-gray-400
+           transition-all duration-200
+           focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10
+           hover:border-gray-300;
+  }
+  
+  /* Sidebar item */
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl
+           text-gray-600 font-medium transition-all duration-200
+           hover:bg-gray-100 hover:text-gray-900
+           focus:outline-none focus:ring-2 focus:ring-primary-500/20;
+  }
+  
+  .sidebar-item-active {
+    @apply sidebar-item bg-primary-50 text-primary-600 
+           hover:bg-primary-100 hover:text-primary-700;
+  }
+  
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold;
+  }
+  
+  .badge-primary {
+    @apply badge bg-primary-100 text-primary-700;
+  }
+  
+  .badge-success {
+    @apply badge bg-green-100 text-green-700;
+  }
+  
+  .badge-warning {
+    @apply badge bg-amber-100 text-amber-700;
+  }
+  
+  .badge-danger {
+    @apply badge bg-red-100 text-red-700;
+  }
+}
+
+/* Scrollbar moderna */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Animaciones suaves */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Utilidades de texto */
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, var(--color-primary-600), var(--color-secondary-600));
+}
+
+/* Gradientes de fondo suaves */
+.bg-gradient-soft {
+  background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+}

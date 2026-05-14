@@ -25,7 +25,7 @@ const COLORES = ['#f97316', '#ef4444', '#f59e0b', '#22c55e', '#14b8a6', '#3b82f6
 const EMPTY_FORM = { nombre: '', icono: '🍕', color: '#f97316', orden: 0, activo: 1, imagen: '', subcategorias: [] };
 
 const CONTROL =
-  'h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-100';
+  'h-11 rounded-2xl border border-gray-200 bg-gray-50 px-4 text-sm font-medium text-gray-700 outline-none transition focus:border-indigo-200 focus:bg-white focus:ring-4 focus:ring-indigo-100';
 
 function rgba(hex, alpha) {
   const clean = (hex || '#f97316').replace('#', '');
@@ -56,15 +56,14 @@ function sortItems(items, sortBy) {
 function StatCard({ label, value, icon: Icon, tone }) {
   return (
     <div
-      className="rounded-[24px] border border-white/70 bg-white/90 px-4 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)]"
-      style={{ backgroundImage: `linear-gradient(135deg, ${rgba(tone, 0.14)}, rgba(255,255,255,0.94) 62%)` }}
+      className="group rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-100 hover:shadow-xl"
     >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-          <p className="mt-2 text-2xl font-black tracking-tight text-slate-950">{value}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">{label}</p>
+          <p className="mt-2 text-2xl font-black tracking-tight text-gray-900">{value}</p>
         </div>
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl" style={{ backgroundColor: rgba(tone, 0.14), color: tone }}>
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm transition-transform duration-300 group-hover:scale-110" style={{ backgroundColor: rgba(tone, 0.14), color: tone }}>
           <Icon size={18} />
         </div>
       </div>
@@ -76,18 +75,18 @@ function CategoryCard({ categoria, onView, onEdit, onToggle, onDelete }) {
   const active = Number(categoria.activo) === 1;
 
   return (
-    <article className="group flex h-full flex-col rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_16px_34px_rgba(15,23,42,0.06)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(15,23,42,0.10)]">
+    <article className="group flex h-full flex-col rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-indigo-100 hover:shadow-xl">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-[18px] border border-white text-[30px] shadow-sm" style={{ backgroundColor: rgba(categoria.color, 0.14) }}>
+          <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white text-[30px] shadow-sm" style={{ backgroundColor: rgba(categoria.color, 0.14) }}>
             {categoria.imagen ? <img src={categoria.imagen} alt={categoria.nombre} className="h-full w-full object-cover" /> : categoria.icono || '🍽️'}
           </div>
 
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{categoria.codigo}</p>
-            <h3 className="truncate text-lg font-black tracking-tight text-slate-950">{categoria.nombre}</h3>
-            <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-              <span className={`rounded-full px-2.5 py-1 font-bold ${active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">{categoria.codigo}</p>
+            <h3 className="truncate text-lg font-black tracking-tight text-gray-900">{categoria.nombre}</h3>
+            <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+              <span className={`rounded-full px-2.5 py-1 font-bold ${active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>
                 {stateText(categoria.activo)}
               </span>
               <span>Orden {categoria.orden}</span>
@@ -96,10 +95,10 @@ function CategoryCard({ categoria, onView, onEdit, onToggle, onDelete }) {
         </div>
 
         <div className="flex gap-1 opacity-100 md:opacity-0 md:transition md:group-hover:opacity-100">
-          <button type="button" onClick={() => onView(categoria)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800">
+          <button type="button" onClick={() => onView(categoria)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700">
             <Eye size={15} />
           </button>
-          <button type="button" onClick={() => onEdit(categoria)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800">
+          <button type="button" onClick={() => onEdit(categoria)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700">
             <Pencil size={15} />
           </button>
         </div>
@@ -107,31 +106,31 @@ function CategoryCard({ categoria, onView, onEdit, onToggle, onDelete }) {
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-slate-50 px-3 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Productos</p>
-          <p className="mt-1 text-xl font-black tracking-tight text-slate-950">{categoria.productos}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">Productos</p>
+          <p className="mt-1 text-xl font-black tracking-tight text-[#5D87FF]">{categoria.productos}</p>
         </div>
         <div className="rounded-2xl bg-slate-50 px-3 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Color</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">Color</p>
           <div className="mt-2 flex items-center gap-2">
             <span className="h-4 w-4 rounded-full border border-white" style={{ backgroundColor: categoria.color }} />
-            <span className="text-sm font-semibold text-slate-700">{categoria.color}</span>
+            <span className="text-sm font-semibold text-gray-700">{categoria.color}</span>
           </div>
         </div>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-3 py-3 text-sm text-slate-500">
+      <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-gray-500">
         Vista compacta, clara y reutilizable para el resto del admin.
       </div>
 
       {categoria.subcategorias?.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {categoria.subcategorias.slice(0, 3).map((sub, index) => (
-            <span key={`${sub.nombre}-${index}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+            <span key={`${sub.nombre}-${index}`} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">
               {sub.nombre}
             </span>
           ))}
           {categoria.subcategorias.length > 3 && (
-            <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-700">
+            <span className="rounded-full bg-[#ECF2FF] px-2.5 py-1 text-xs font-semibold text-[#5D87FF]">
               +{categoria.subcategorias.length - 3}
             </span>
           )}
@@ -154,37 +153,37 @@ function CategoryRow({ categoria, onView, onEdit, onToggle, onDelete }) {
   const active = Number(categoria.activo) === 1;
 
   return (
-    <tr className="border-b border-slate-100 hover:bg-slate-50/70">
+    <tr className="border-b border-slate-100 transition hover:bg-slate-50">
       <td className="px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-white text-2xl" style={{ backgroundColor: rgba(categoria.color, 0.14) }}>
             {categoria.imagen ? <img src={categoria.imagen} alt={categoria.nombre} className="h-full w-full object-cover" /> : categoria.icono}
           </div>
           <div>
-            <p className="font-bold text-slate-900">{categoria.nombre}</p>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{categoria.codigo}</p>
+            <p className="font-bold text-gray-900">{categoria.nombre}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">{categoria.codigo}</p>
           </div>
         </div>
       </td>
-      <td className="px-5 py-4 text-sm text-slate-600">{categoria.orden}</td>
-      <td className="px-5 py-4 text-sm font-semibold text-slate-900">{categoria.productos}</td>
+      <td className="px-5 py-4 text-sm text-gray-600">{categoria.orden}</td>
+      <td className="px-5 py-4 text-sm font-semibold text-gray-900">{categoria.productos}</td>
       <td className="px-5 py-4">
-        <span className={`rounded-full px-3 py-1 text-xs font-bold ${active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>
           {stateText(categoria.activo)}
         </span>
       </td>
       <td className="px-5 py-4">
         <div className="flex items-center gap-2">
           <span className="h-4 w-4 rounded-full border border-white" style={{ backgroundColor: categoria.color }} />
-          <span className="text-sm text-slate-500">{categoria.color}</span>
+          <span className="text-sm text-gray-500">{categoria.color}</span>
         </div>
       </td>
       <td className="px-5 py-4">
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={() => onView(categoria)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800">
+          <button type="button" onClick={() => onView(categoria)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700">
             <Eye size={15} />
           </button>
-          <button type="button" onClick={() => onEdit(categoria)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800">
+          <button type="button" onClick={() => onEdit(categoria)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700">
             <Pencil size={15} />
           </button>
           <button type="button" onClick={() => onToggle(categoria)} className={`flex h-9 w-9 items-center justify-center rounded-xl border transition ${active ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100' : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
@@ -415,134 +414,137 @@ export default function Categorias() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fffdf9_0%,#f8fafc_40%,#f7f8fb_100%)]">
-      <div className="mx-auto max-w-7xl px-6 py-8 xl:px-8">
-        <section className="rounded-[32px] border border-white/70 bg-[linear-gradient(135deg,rgba(255,247,237,0.95),rgba(255,255,255,0.92))] p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+    <div className="mx-auto max-w-7xl animate-fade-in space-y-6 px-4 pb-8 pt-6 sm:px-6 lg:px-8">
+      <section className="rounded-[28px] border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="hidden h-14 w-14 items-center justify-center rounded-2xl bg-[#ECF2FF] text-[#5D87FF] shadow-sm sm:flex">
+              <Layers3 size={28} />
+            </div>
             <div className="max-w-2xl">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-orange-600">Modo visual base</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">Categorias</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Version compacta, mas ordenada y mas seria. Esta es la referencia que despues vamos a replicar en productos, clientes y pedidos.
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#5D87FF]">Estructura del menu</p>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-gray-800 sm:text-4xl">Categorias</h1>
+              <p className="mt-2 text-sm leading-6 text-gray-500">
+                Organiza la carta con una vista mas sobria y consistente con el resto del admin, manteniendo foco en orden, estado y relacion con productos.
               </p>
             </div>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={cargar} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-                Recargar
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={cargar} className="inline-flex h-11 items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              Recargar
+            </button>
+
+            <div className="inline-flex rounded-2xl border border-gray-200 bg-gray-50 p-1">
+              <button type="button" onClick={() => setViewMode('grid')} className={`inline-flex h-9 items-center gap-2 rounded-[14px] px-4 text-sm font-semibold transition ${viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:bg-white hover:text-gray-700'}`}>
+                <LayoutGrid size={14} />
+                Grid
               </button>
-
-              <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1">
-                <button type="button" onClick={() => setViewMode('grid')} className={`inline-flex h-9 items-center gap-2 rounded-[14px] px-4 text-sm font-semibold transition ${viewMode === 'grid' ? 'bg-slate-950 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
-                  <LayoutGrid size={14} />
-                  Grid
-                </button>
-                <button type="button" onClick={() => setViewMode('list')} className={`inline-flex h-9 items-center gap-2 rounded-[14px] px-4 text-sm font-semibold transition ${viewMode === 'list' ? 'bg-slate-950 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
-                  <List size={14} />
-                  Lista
-                </button>
-              </div>
-
-              <button type="button" onClick={() => abrir()} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#f97316,#ea580c)] px-5 text-sm font-bold text-white shadow-[0_16px_30px_rgba(249,115,22,0.28)] transition hover:-translate-y-0.5">
-                <Plus size={15} />
-                Nueva categoria
+              <button type="button" onClick={() => setViewMode('list')} className={`inline-flex h-9 items-center gap-2 rounded-[14px] px-4 text-sm font-semibold transition ${viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:bg-white hover:text-gray-700'}`}>
+                <List size={14} />
+                Lista
               </button>
             </div>
+
+            <button type="button" onClick={() => abrir()} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[#5D87FF] px-5 text-sm font-bold text-white shadow-[0_14px_30px_rgba(93,135,255,0.26)] transition hover:-translate-y-0.5 hover:bg-[#4a74ef]">
+              <Plus size={15} />
+              Nueva categoria
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Total" value={stats.total} icon={Layers3} tone="#5D87FF" />
+        <StatCard label="Activas" value={stats.activas} icon={CheckCircle2} tone="#13DEB9" />
+        <StatCard label="Inactivas" value={stats.inactivas} icon={CircleOff} tone="#7C8FAC" />
+        <StatCard label="Productos" value={stats.productos} icon={Package} tone="#49BEFF" />
+      </section>
+
+      <section className="rounded-[28px] border border-gray-100 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="relative w-full xl:max-w-md">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={busqueda} onChange={(event) => setBusqueda(event.target.value)} placeholder="Buscar categoria..." className={`${CONTROL} w-full pl-11`} />
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Total" value={stats.total} icon={Layers3} tone="#f97316" />
-            <StatCard label="Activas" value={stats.activas} icon={CheckCircle2} tone="#22c55e" />
-            <StatCard label="Inactivas" value={stats.inactivas} icon={CircleOff} tone="#64748b" />
-            <StatCard label="Productos" value={stats.productos} icon={Package} tone="#3b82f6" />
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <select value={estadoFiltro} onChange={(event) => setEstadoFiltro(event.target.value)} className={`${CONTROL} min-w-[150px]`}>
+              <option value="todas">Todas</option>
+              <option value="activas">Activas</option>
+              <option value="inactivas">Inactivas</option>
+            </select>
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className={`${CONTROL} min-w-[160px]`}>
+              <option value="orden">Orden</option>
+              <option value="nombre">Nombre</option>
+              <option value="productos">Productos</option>
+              <option value="estado">Estado</option>
+            </select>
           </div>
-        </section>
+        </div>
 
-        <section className="mt-6 rounded-[28px] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="relative w-full xl:max-w-md">
-              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={busqueda} onChange={(event) => setBusqueda(event.target.value)} placeholder="Buscar categoria..." className={`${CONTROL} w-full pl-11`} />
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+          <span className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-600">{filtered.length} visibles</span>
+          <span className="rounded-full bg-[#ECF2FF] px-3 py-1.5 font-semibold text-[#5D87FF]">{viewMode === 'grid' ? 'Vista tarjetas' : 'Vista tabla'}</span>
+        </div>
+
+        <div className="mt-5">
+          {loading ? (
+            <div className={`grid gap-4 ${viewMode === 'grid' ? 'md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>
+              {Array.from({ length: viewMode === 'grid' ? 6 : 3 }).map((_, index) => (
+                <div key={index} className="h-48 animate-pulse rounded-[24px] bg-slate-100" />
+              ))}
             </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <select value={estadoFiltro} onChange={(event) => setEstadoFiltro(event.target.value)} className={`${CONTROL} min-w-[150px]`}>
-                <option value="todas">Todas</option>
-                <option value="activas">Activas</option>
-                <option value="inactivas">Inactivas</option>
-              </select>
-              <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className={`${CONTROL} min-w-[160px]`}>
-                <option value="orden">Orden</option>
-                <option value="nombre">Nombre</option>
-                <option value="productos">Productos</option>
-                <option value="estado">Estado</option>
-              </select>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-[24px] border border-dashed border-gray-200 bg-slate-50 px-6 py-16 text-center">
+              <h3 className="text-lg font-black tracking-tight text-gray-900">No hay resultados</h3>
+              <p className="mt-2 text-sm text-gray-500">Proba otro filtro o crea una categoria nueva.</p>
             </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-            <span className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold">{filtered.length} visibles</span>
-            <span className="rounded-full bg-orange-50 px-3 py-1.5 font-semibold text-orange-700">{viewMode === 'grid' ? 'Vista tarjetas' : 'Vista tabla'}</span>
-          </div>
-
-          <div className="mt-5">
-            {loading ? (
-              <div className={`grid gap-4 ${viewMode === 'grid' ? 'md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>
-                {Array.from({ length: viewMode === 'grid' ? 6 : 3 }).map((_, index) => (
-                  <div key={index} className="h-48 animate-pulse rounded-[24px] bg-slate-100" />
-                ))}
+          ) : viewMode === 'grid' ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((categoria) => (
+                <CategoryCard key={categoria.id} categoria={categoria} onView={setDetalle} onEdit={abrir} onToggle={toggleActivo} onDelete={eliminar} />
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-[24px] border border-gray-100 shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="min-w-full bg-white">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left">
+                      <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Categoria</th>
+                      <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Orden</th>
+                      <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Productos</th>
+                      <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Estado</th>
+                      <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Color</th>
+                      <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((categoria) => (
+                      <CategoryRow key={categoria.id} categoria={categoria} onView={setDetalle} onEdit={abrir} onToggle={toggleActivo} onDelete={eliminar} />
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ) : filtered.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-16 text-center">
-                <h3 className="text-lg font-black tracking-tight text-slate-950">No hay resultados</h3>
-                <p className="mt-2 text-sm text-slate-500">Proba otro filtro o crea una categoria nueva.</p>
-              </div>
-            ) : viewMode === 'grid' ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {filtered.map((categoria) => (
-                  <CategoryCard key={categoria.id} categoria={categoria} onView={setDetalle} onEdit={abrir} onToggle={toggleActivo} onDelete={eliminar} />
-                ))}
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-[24px] border border-slate-200">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full bg-white">
-                    <thead className="bg-slate-50">
-                      <tr className="text-left">
-                        <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Categoria</th>
-                        <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Orden</th>
-                        <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Productos</th>
-                        <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Estado</th>
-                        <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Color</th>
-                        <th className="px-5 py-4 text-right text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((categoria) => (
-                        <CategoryRow key={categoria.id} categoria={categoria} onView={setDetalle} onEdit={abrir} onToggle={toggleActivo} onDelete={eliminar} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
+            </div>
+          )}
+        </div>
+      </section>
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={cerrarModal}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 p-4 backdrop-blur-sm" onClick={cerrarModal}>
           <div
             className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.26)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{modal === 'nuevo' ? 'Nueva categoria' : 'Editar categoria'}</p>
-                <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">{modal === 'nuevo' ? 'Crear categoria' : 'Ajustar categoria'}</h2>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">{modal === 'nuevo' ? 'Nueva categoria' : 'Editar categoria'}</p>
+                <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950">{modal === 'nuevo' ? 'Crear categoria' : 'Ajustar categoria'}</h2>
               </div>
-              <button type="button" onClick={cerrarModal} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 transition hover:bg-slate-50">
+              <button type="button" onClick={cerrarModal} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-gray-200 text-gray-500 transition hover:bg-gray-50">
                 <X size={16} />
               </button>
             </div>
@@ -561,7 +563,7 @@ export default function Categorias() {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Icono</p>
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Icono</p>
                   <div className="grid grid-cols-5 gap-2 sm:grid-cols-6">
                     {ICONOS.map((icono) => (
                       <button
@@ -569,7 +571,7 @@ export default function Categorias() {
                         type="button"
                         onClick={() => setForm({ ...form, icono })}
                         className={`flex h-12 items-center justify-center rounded-2xl border text-2xl transition ${
-                          form.icono === icono ? 'border-orange-300 bg-orange-50' : 'border-slate-200 bg-slate-50 hover:bg-white'
+                          form.icono === icono ? 'border-indigo-200 bg-[#ECF2FF]' : 'border-gray-200 bg-gray-50 hover:bg-white'
                         }`}
                       >
                         {icono}
@@ -579,25 +581,25 @@ export default function Categorias() {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Color</p>
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Color</p>
                   <div className="flex flex-wrap gap-2">
                     {COLORES.map((color) => (
                       <button
                         key={color}
                         type="button"
                         onClick={() => setForm({ ...form, color })}
-                        className={`h-10 w-10 rounded-2xl border-2 transition ${form.color === color ? 'scale-110 border-slate-950' : 'border-white'}`}
+                        className={`h-10 w-10 rounded-2xl border-2 transition ${form.color === color ? 'scale-110 border-gray-950' : 'border-white'}`}
                         style={{ backgroundColor: color }}
                       />
                     ))}
                   </div>
                 </div>
 
-                <section className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+                <section className="rounded-[24px] border border-gray-200 bg-gray-50/70 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Imagen</p>
-                      <p className="mt-1 text-sm text-slate-500">Usala para que la categoria tenga una identidad real dentro del panel.</p>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Imagen</p>
+                      <p className="mt-1 text-sm text-gray-500">Usala para que la categoria tenga una identidad real dentro del panel.</p>
                     </div>
                     {imagePreview && (
                       <button
@@ -619,29 +621,29 @@ export default function Categorias() {
                           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: rgba(form.color, 0.14), color: form.color }}>
                             <ImagePlus size={20} />
                           </div>
-                          <p className="mt-2 text-xs font-semibold text-slate-500">Sin imagen</p>
+                          <p className="mt-2 text-xs font-semibold text-gray-500">Sin imagen</p>
                         </div>
                       )}
                     </div>
 
-                    <label className="flex min-h-[128px] cursor-pointer flex-col items-center justify-center rounded-[22px] border border-dashed border-slate-300 bg-white px-5 text-center transition hover:border-orange-300 hover:bg-orange-50/40">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                    <label className="flex min-h-[128px] cursor-pointer flex-col items-center justify-center rounded-[22px] border border-dashed border-gray-300 bg-white px-5 text-center transition hover:border-indigo-200 hover:bg-indigo-50/60">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#ECF2FF] text-[#5D87FF]">
                         <ImagePlus size={20} />
                       </div>
-                      <span className="mt-3 text-sm font-bold text-slate-800">{imagePreview ? 'Reemplazar imagen' : 'Subir imagen real'}</span>
-                      <span className="mt-1 max-w-[240px] text-xs leading-5 text-slate-500">JPG o PNG. Se mostrara en tarjetas, detalle y vistas futuras del admin.</span>
+                      <span className="mt-3 text-sm font-bold text-gray-800">{imagePreview ? 'Reemplazar imagen' : 'Subir imagen real'}</span>
+                      <span className="mt-1 max-w-[240px] text-xs leading-5 text-gray-500">JPG o PNG. Se mostrara en tarjetas, detalle y vistas futuras del admin.</span>
                       <input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageChange(event.target.files?.[0])} />
                     </label>
                   </div>
                 </section>
 
-                <section className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+                <section className="rounded-[24px] border border-gray-200 bg-gray-50/70 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Subcategorias</p>
-                      <p className="mt-1 text-sm text-slate-500">Una capa extra de orden para cuando armemos mejor la carta y los filtros.</p>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Subcategorias</p>
+                      <p className="mt-1 text-sm text-gray-500">Una capa extra de orden para cuando armemos mejor la carta y los filtros.</p>
                     </div>
-                    <button type="button" onClick={addSubcategoria} className="inline-flex h-10 items-center rounded-2xl bg-slate-950 px-4 text-xs font-bold text-white transition hover:bg-slate-800">
+                    <button type="button" onClick={addSubcategoria} className="inline-flex h-10 items-center rounded-2xl bg-gray-950 px-4 text-xs font-bold text-white transition hover:bg-gray-800">
                       <Plus size={14} className="mr-1.5" />
                       Agregar
                     </button>
@@ -649,20 +651,20 @@ export default function Categorias() {
 
                   <div className="mt-4 space-y-2.5">
                     {(form.subcategorias || []).length === 0 ? (
-                      <div className="rounded-[20px] border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-400">
+                      <div className="rounded-[20px] border border-dashed border-gray-200 bg-white px-4 py-5 text-sm text-gray-400">
                         Todavia no agregaste subcategorias.
                       </div>
                     ) : (
                       form.subcategorias.map((sub, index) => (
                         <div key={`sub-${index}`} className="flex items-center gap-2 rounded-[20px] border border-white bg-white p-2 shadow-sm">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-100 text-xs font-black text-slate-500">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gray-100 text-xs font-black text-gray-500">
                             {index + 1}
                           </div>
                           <input
                             value={sub.nombre}
                             onChange={(event) => updateSubcategoria(index, event.target.value)}
                             placeholder={`Subcategoria ${index + 1}`}
-                            className={`${CONTROL} h-10 w-full border-0 bg-slate-50 px-3 focus:bg-white`}
+                            className={`${CONTROL} h-10 w-full border-0 bg-gray-50 px-3 focus:bg-white`}
                           />
                           <button type="button" onClick={() => removeSubcategoria(index)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-rose-200 text-rose-600 transition hover:bg-rose-50">
                             <Trash2 size={14} />
@@ -677,7 +679,7 @@ export default function Categorias() {
                       {form.subcategorias
                         .filter((sub) => sub?.nombre?.trim())
                         .map((sub, index) => (
-                          <span key={`chip-${index}`} className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700">
+                          <span key={`chip-${index}`} className="rounded-full border border-indigo-100 bg-[#ECF2FF] px-3 py-1.5 text-xs font-semibold text-[#5D87FF]">
                             {sub.nombre}
                           </span>
                         ))}
@@ -686,13 +688,13 @@ export default function Categorias() {
                 </section>
               </div>
 
-              <div className="border-t border-slate-100 bg-slate-50/80 p-5 lg:border-l lg:border-t-0">
+              <div className="border-t border-gray-100 bg-gray-50/80 p-5 lg:border-l lg:border-t-0">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Preview</p>
-                    <p className="mt-1 text-sm text-slate-500">Asi se va a ver la categoria en el panel.</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Preview</p>
+                    <p className="mt-1 text-sm text-gray-500">Asi se va a ver la categoria en el panel.</p>
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-slate-500 shadow-sm">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-gray-500 shadow-sm">
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: form.color }} />
                     {stateText(form.activo)}
                   </div>
@@ -700,7 +702,7 @@ export default function Categorias() {
 
                 <div className="mt-3 rounded-[24px] border border-white bg-white shadow-sm">
                   <div className="h-28 rounded-t-[24px] px-4 py-4" style={{ background: `linear-gradient(135deg, ${rgba(form.color, 0.28)}, ${rgba(form.color, 0.06)})` }}>
-                    <div className="inline-flex rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 backdrop-blur">
+                    <div className="inline-flex rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-gray-500 backdrop-blur">
                       {codeFor(modal?.id, categorias.length)}
                     </div>
                   </div>
@@ -708,18 +710,18 @@ export default function Categorias() {
                     <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[20px] border border-white text-3xl shadow-sm" style={{ backgroundColor: rgba(form.color, 0.14) }}>
                       {imagePreview ? <img src={imagePreview} alt="preview" className="h-full w-full object-cover" /> : form.icono}
                     </div>
-                    <h3 className="mt-1 text-lg font-black tracking-tight text-slate-950">{form.nombre || 'Nombre de categoria'}</h3>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <h3 className="mt-1 text-lg font-black tracking-tight text-gray-950">{form.nombre || 'Nombre de categoria'}</h3>
+                    <p className="mt-1 text-sm text-gray-500">
                       {imagePreview ? 'Con imagen personalizada cargada.' : 'Con icono visual como respaldo.'}
                     </p>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Estado</p>
-                        <p className="mt-1 font-semibold text-slate-900">{stateText(form.activo)}</p>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">Estado</p>
+                        <p className="mt-1 font-semibold text-gray-900">{stateText(form.activo)}</p>
                       </div>
                       <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Orden</p>
-                        <p className="mt-1 font-semibold text-slate-900">{form.orden || 0}</p>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">Orden</p>
+                        <p className="mt-1 font-semibold text-gray-900">{form.orden || 0}</p>
                       </div>
                     </div>
 
@@ -729,7 +731,7 @@ export default function Categorias() {
                           .filter((sub) => sub?.nombre?.trim())
                           .slice(0, 4)
                           .map((sub, index) => (
-                            <span key={`preview-sub-${index}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                            <span key={`preview-sub-${index}`} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">
                               {sub.nombre}
                             </span>
                           ))}
@@ -741,11 +743,11 @@ export default function Categorias() {
             </div>
             </div>
 
-            <div className="flex flex-col gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:justify-end">
-              <button type="button" onClick={cerrarModal} className="h-11 rounded-2xl border border-slate-200 px-5 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
+            <div className="flex flex-col gap-2 border-t border-gray-100 bg-white px-5 py-4 sm:flex-row sm:justify-end">
+              <button type="button" onClick={cerrarModal} className="h-11 rounded-2xl border border-gray-200 px-5 text-sm font-bold text-gray-600 transition hover:bg-gray-50">
                 Cancelar
               </button>
-              <button type="button" onClick={guardar} disabled={saving} className="h-11 rounded-2xl bg-[linear-gradient(135deg,#f97316,#ea580c)] px-5 text-sm font-bold text-white shadow-[0_16px_26px_rgba(249,115,22,0.24)] transition hover:-translate-y-0.5 disabled:opacity-60">
+              <button type="button" onClick={guardar} disabled={saving} className="h-11 rounded-2xl bg-[#5D87FF] px-5 text-sm font-bold text-white shadow-[0_14px_30px_rgba(93,135,255,0.26)] transition hover:-translate-y-0.5 hover:bg-[#4a74ef] disabled:opacity-60">
                 {saving ? 'Guardando...' : modal === 'nuevo' ? 'Crear categoria' : 'Guardar cambios'}
               </button>
             </div>
@@ -754,7 +756,7 @@ export default function Categorias() {
       )}
 
       {detalle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={() => setDetalle(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 p-4 backdrop-blur-sm" onClick={() => setDetalle(null)}>
           <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.26)]" onClick={(event) => event.stopPropagation()}>
             <div className="h-28" style={{ background: `linear-gradient(135deg, ${rgba(detalle.color, 0.28)}, ${rgba(detalle.color, 0.06)})` }} />
             <div className="-mt-8 px-5 pb-5">
@@ -762,26 +764,26 @@ export default function Categorias() {
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-[20px] border border-white text-3xl shadow-sm" style={{ backgroundColor: rgba(detalle.color, 0.14) }}>
                   {detalle.imagen ? <img src={detalle.imagen} alt={detalle.nombre} className="h-full w-full object-cover" /> : detalle.icono}
                 </div>
-                <button type="button" onClick={() => setDetalle(null)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50">
+                <button type="button" onClick={() => setDetalle(null)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-gray-200 bg-white text-gray-500 transition hover:bg-gray-50">
                   <X size={16} />
                 </button>
               </div>
 
-              <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{detalle.codigo}</p>
-              <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{detalle.nombre}</h3>
+              <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">{detalle.codigo}</p>
+              <h3 className="mt-1 text-2xl font-black tracking-tight text-gray-950">{detalle.nombre}</h3>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Estado</p>
-                  <p className="mt-1 font-semibold text-slate-900">{stateText(detalle.activo)}</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">Estado</p>
+                  <p className="mt-1 font-semibold text-gray-900">{stateText(detalle.activo)}</p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Productos</p>
-                  <p className="mt-1 font-semibold text-slate-900">{detalle.productos}</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">Productos</p>
+                  <p className="mt-1 font-semibold text-[#5D87FF]">{detalle.productos}</p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Color</p>
-                  <div className="mt-1 flex items-center gap-2 font-semibold text-slate-900">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">Color</p>
+                  <div className="mt-1 flex items-center gap-2 font-semibold text-gray-900">
                     <span className="h-4 w-4 rounded-full" style={{ backgroundColor: detalle.color }} />
                     {detalle.color}
                   </div>
@@ -789,11 +791,11 @@ export default function Categorias() {
               </div>
 
               {detalle.subcategorias?.length > 0 && (
-                <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Subcategorias</p>
+                <div className="mt-4 rounded-[24px] border border-gray-200 bg-gray-50/80 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Subcategorias</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {detalle.subcategorias.map((sub, index) => (
-                      <span key={`detalle-sub-${index}`} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">
+                      <span key={`detalle-sub-${index}`} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm">
                         {sub.nombre}
                       </span>
                     ))}
@@ -801,21 +803,21 @@ export default function Categorias() {
                 </div>
               )}
 
-              <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Productos vinculados</p>
+              <div className="mt-5 rounded-[24px] border border-gray-200 bg-gray-50/80 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Productos vinculados</p>
                 <div className="mt-3 space-y-2">
                   {productosDetalle.length > 0 ? (
                     productosDetalle.map((producto) => (
                       <div key={producto.id} className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-sm">
                         <div>
-                          <p className="font-semibold text-slate-900">{producto.nombre}</p>
-                          <p className="text-xs text-slate-400 capitalize">{producto.estado || 'activo'}</p>
+                          <p className="font-semibold text-gray-900">{producto.nombre}</p>
+                          <p className="text-xs text-gray-400 capitalize">{producto.estado || 'activo'}</p>
                         </div>
-                        <p className="font-bold text-slate-900">${Number(producto.precio || 0).toLocaleString('es-AR')}</p>
+                        <p className="font-bold text-gray-900">${Number(producto.precio || 0).toLocaleString('es-AR')}</p>
                       </div>
                     ))
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-400">
+                    <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-400">
                       Esta categoria todavia no tiene productos.
                     </div>
                   )}
@@ -823,7 +825,7 @@ export default function Categorias() {
               </div>
 
               <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-                <button type="button" onClick={() => setDetalle(null)} className="h-11 rounded-2xl border border-slate-200 px-5 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
+                <button type="button" onClick={() => setDetalle(null)} className="h-11 rounded-2xl border border-gray-200 px-5 text-sm font-bold text-gray-600 transition hover:bg-gray-50">
                   Cerrar
                 </button>
                 <button
@@ -833,7 +835,7 @@ export default function Categorias() {
                     setDetalle(null);
                     abrir(current);
                   }}
-                  className="h-11 rounded-2xl bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800"
+                  className="h-11 rounded-2xl bg-gray-950 px-5 text-sm font-bold text-white transition hover:bg-gray-800"
                 >
                   Editar categoria
                 </button>
@@ -845,3 +847,4 @@ export default function Categorias() {
     </div>
   );
 }
+

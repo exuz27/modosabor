@@ -5,12 +5,21 @@ const auth = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const { getConfigMap, getMe } = require('../utils/mercadoPago');
-const { getWhatsAppStatus, sendWhatsAppText, normalizeWhatsAppPhone } = require('../utils/whatsapp');
 const { requirePermission } = require('../utils/permissions');
+const { logAudit, actorFromRequest } = require('../utils/audit');
 const { quoteDelivery, serializeZones } = require('../utils/deliveryZones');
 const { buildPrintTestDocument } = require('../utils/printTemplates');
 const { getCurrentShiftInfo } = require('../utils/shifts');
-const { mergeRuntimeConfig, isHttpsUrl, isPublicHttpsUrl } = require('../utils/runtimeConfig');
+const { mergeRuntimeConfig } = require('../utils/runtimeConfig');
+const { uploadsDir, uploadPathFromFilename } = require('../utils/storagePaths');
+const {
+  createFileFilter,
+  IMAGE_EXTENSIONS,
+  IMAGE_MIME_TYPES,
+  ICON_EXTENSIONS,
+  ICON_MIME_TYPES,
+  SQLITE_EXTENSIONS,
+} = require('../utils/uploadValidation');
 const {
   listBackups,
   createDatabaseBackup,
@@ -20,16 +29,44 @@ const {
 } = require('../utils/backupManager');
 
 const storage = multer.diskStorage({
-  destination: path.join(__dirname, '../uploads'),
-  filename: (req, file, cb) => cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`)
+  destination: uploadsDir,
+  filename: (_req, file, cb) => cb(null, `${file.fieldname}-${Date.now()}${String(path.extname(file.originalname) || '').toLowerCase()}`)
 });
-const upload = multer({ storage, limits: { fileSize: 2 * 1024 * 1024 } });
+const backupStorage = multer.diskStorage({
+  destination: backupsDir,
+  filename: (_req, file, cb) => cb(null, `import-${Date.now()}${String(path.extname(file.originalname) || '.sqlite').toLowerCase()}`),
+});
+const imageAssetFilter = createFileFilter({
+  allowedExtensions: IMAGE_EXTENSIONS,
+  allowedMimeTypes: IMAGE_MIME_TYPES,
+  message: 'El archivo debe ser una imagen JPG, PNG, WEBP o GIF',
+});
+const faviconAssetFilter = createFileFilter({
+  allowedExtensions: ICON_EXTENSIONS,
+  allowedMimeTypes: ICON_MIME_TYPES,
+  message: 'El favicon debe ser ICO, JPG, PNG, WEBP o GIF',
+});
+const configAssetFilter = (req, file, cb) => (
+  file.fieldname === 'favicon' ? faviconAssetFilter(req, file, cb) : imageAssetFilter(req, file, cb)
+);
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: configAssetFilter,
+});
+const backupUpload = multer({
+  storage: backupStorage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: createFileFilter({
+    allowedExtensions: SQLITE_EXTENSIONS,
+    message: 'El backup debe ser un archivo .sqlite',
+  }),
+});
 
 const SENSITIVE_KEYS = new Set([
   'mercadopago_token',
-  'whatsapp_api_token',
-  'openai_api_key',
 ]);
+const SENSITIVE_PLACEHOLDER = '__CONFIGURED__';
 
 function rowsToConfig(rows) {
   const config = {};
@@ -44,53 +81,156 @@ function getFullConfig() {
   const config = mergeRuntimeConfig(rowsToConfig(rows));
   return {
     ...config,
+    negocio_logo_url: config.negocio_logo || '',
+    negocio_color_primario: config.color_primario || '',
+    negocio_horarios: config.turnos_negocio || '[]',
     ...getCurrentShiftInfo(config),
   };
 }
 
-function getPublicConfig() {
-  const config = getFullConfig();
+function sanitizeSensitiveConfig(config, { remove = false, includeFlags = false, placeholder = '' } = {}) {
+  const nextConfig = { ...config };
+
   SENSITIVE_KEYS.forEach((key) => {
-    delete config[key];
+    const configured = Boolean(nextConfig[key]);
+    if (includeFlags) {
+      nextConfig[`${key}_configured`] = configured;
+    }
+    if (remove) {
+      delete nextConfig[key];
+      return;
+    }
+    nextConfig[key] = configured ? placeholder : '';
   });
-  return config;
+
+  return nextConfig;
 }
 
-function buildWhatsAppNextSteps({ config, status, botEnabled, aiEnabled, aiKeyPresent, testDestination }) {
-  const steps = [];
-  const webhookUrl = `${String(config.public_api_url || '').replace(/\/$/, '')}/api/whatsapp/webhook`;
+function getAdminConfig() {
+  return sanitizeSensitiveConfig(getFullConfig(), {
+    includeFlags: true,
+    placeholder: SENSITIVE_PLACEHOLDER,
+  });
+}
 
-  if (!botEnabled) {
-    steps.push('Activar "Bot de WhatsApp activo" para permitir respuestas automaticas.');
+function getPublicConfig() {
+  return sanitizeSensitiveConfig(getFullConfig(), { remove: true });
+}
+
+function isSensitivePlaceholder(value) {
+  return String(value || '').trim() === SENSITIVE_PLACEHOLDER;
+}
+
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
-  if (status.mode !== 'api') {
-    steps.push('Cambiar WhatsApp a modo API oficial para responder mensajes entrantes.');
+}
+
+function fallbackShiftName(id) {
+  const normalized = String(id || 'turno').replace(/[_-]+/g, ' ').trim();
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function normalizeTurnos(value) {
+  return parseJsonArray(value)
+    .map((turno, index) => {
+      if (!turno || typeof turno !== 'object') return null;
+
+      if (Object.prototype.hasOwnProperty.call(turno, 'dia')) {
+        return {
+          id: String(turno.dia || `turno_${index + 1}`),
+          nombre: fallbackShiftName(turno.dia || `turno_${index + 1}`),
+          desde: String(turno.inicio || '19:00'),
+          hasta: String(turno.fin || '23:30'),
+          activo: turno.activo !== false,
+        };
+      }
+
+      return {
+        id: String(turno.id || `turno_${index + 1}`),
+        nombre: String(turno.nombre || fallbackShiftName(turno.id || `turno_${index + 1}`)),
+        desde: String(turno.desde || turno.inicio || '19:00'),
+        hasta: String(turno.hasta || turno.fin || '23:30'),
+        activo: turno.activo !== false,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeConfigUpdates(rawUpdates = {}) {
+  const updates = { ...rawUpdates };
+
+  SENSITIVE_KEYS.forEach((key) => {
+    if (isSensitivePlaceholder(updates[key])) {
+      delete updates[key];
+    }
+  });
+
+  Object.keys(updates)
+    .filter((key) => key.endsWith('_configured'))
+    .forEach((key) => {
+      delete updates[key];
+    });
+
+  if (updates.negocio_logo_url && !updates.negocio_logo) {
+    updates.negocio_logo = updates.negocio_logo_url;
   }
-  if (!status.checks.token) {
-    steps.push('Cargar WHATSAPP_API_TOKEN en Render o en la configuracion del sistema.');
-  }
-  if (!status.checks.phone_number_id) {
-    steps.push('Cargar el Phone Number ID de Meta para habilitar el envio por API.');
-  }
-  if (!isPublicHttpsUrl(config.public_api_url || '')) {
-    steps.push('Definir PUBLIC_API_URL con HTTPS publico para que Meta pueda llegar al webhook.');
-  }
-  if (!isHttpsUrl(config.public_app_url || '')) {
-    steps.push('Definir PUBLIC_APP_URL con HTTPS para seguimiento y links publicos.');
-  }
-  if (aiEnabled && !aiKeyPresent) {
-    steps.push('Cargar OPENAI_API_KEY para habilitar la IA conversacional.');
-  }
-  if (!testDestination) {
-    steps.push('Completar un telefono de prueba para validar el envio desde el panel.');
-  } else if (status.mode === 'api' && status.checks.token && status.checks.phone_number_id) {
-    steps.push(`Si Meta rechaza la prueba, agregar ${testDestination} en Meta Developers -> WhatsApp -> API Setup -> To.`);
-  }
-  if (isPublicHttpsUrl(config.public_api_url || '') && status.mode === 'api') {
-    steps.push(`Configurar el webhook de Meta con esta URL: ${webhookUrl}`);
+  if (updates.negocio_color_primario && !updates.color_primario) {
+    updates.color_primario = updates.negocio_color_primario;
   }
 
-  return Array.from(new Set(steps));
+  if (updates.negocio_horarios !== undefined && updates.turnos_negocio === undefined) {
+    updates.turnos_negocio = updates.negocio_horarios;
+  }
+
+  if (updates.turnos_negocio !== undefined) {
+    updates.turnos_negocio = JSON.stringify(normalizeTurnos(updates.turnos_negocio));
+  }
+
+  if (updates.delivery_zonas !== undefined) {
+    updates.delivery_zonas = serializeZones(parseJsonArray(updates.delivery_zonas));
+  }
+
+  delete updates.negocio_horarios;
+
+  // Limpiar claves calculadas que no deben persistirse
+  delete updates.abierto_ahora;
+  delete updates.turno_actual;
+  delete updates.turnos;
+  delete updates.negocio_logo_url;
+  delete updates.negocio_color_primario;
+
+  return updates;
+}
+
+function persistConfigUpdates(rawUpdates, req) {
+  const updates = normalizeConfigUpdates(rawUpdates);
+  const stmt = db.prepare('INSERT OR REPLACE INTO configuracion (clave, valor) VALUES (?, ?)');
+  
+  Object.entries(updates).forEach(([key, value]) => {
+    // Asegurar que guardamos strings para evitar errores en SQLite
+    const safeValue = (value === null || value === undefined) ? '' : String(value);
+    stmt.run(key, safeValue);
+  });
+
+  if (req) {
+    const actor = actorFromRequest(req);
+    logAudit(db, {
+      modulo: 'configuracion',
+      accion: 'actualizar',
+      entidad: 'configuracion',
+      actor_id: actor.actor_id,
+      actor_nombre: actor.actor_nombre,
+      detalle: { claves: Object.keys(updates).sort() },
+    });
+  }
+
+  return getAdminConfig();
 }
 
 router.get('/', (req, res) => {
@@ -98,7 +238,29 @@ router.get('/', (req, res) => {
 });
 
 router.get('/admin', auth, requirePermission('config.manage'), (req, res) => {
-  res.json(getFullConfig());
+  res.json(getAdminConfig());
+});
+
+router.get('/map', auth, requirePermission('config.manage'), (req, res) => {
+  res.json(getAdminConfig());
+});
+
+router.get('/audit', auth, requirePermission('config.manage'), (req, res) => {
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit || 50)));
+  const rows = db.prepare(`
+    SELECT *
+    FROM auditoria_eventos
+    ORDER BY datetime(creado_en) DESC, id DESC
+    LIMIT ?
+  `).all(limit);
+
+  res.json(rows.map((row) => {
+    try {
+      return { ...row, detalle: JSON.parse(row.detalle || '{}') };
+    } catch {
+      return row;
+    }
+  }));
 });
 
 router.get('/mercadopago/status', auth, requirePermission('config.manage'), async (req, res) => {
@@ -186,73 +348,6 @@ router.get('/mercadopago/eventos', auth, requirePermission('config.manage'), (re
   res.json(rows);
 });
 
-router.get('/whatsapp/status', auth, requirePermission('config.manage'), async (req, res) => {
-  const config = getFullConfig();
-  const status = getWhatsAppStatus(config);
-  const botEnabled = config.whatsapp_bot_activo === '1';
-  const aiEnabled = config.whatsapp_ai_activa === '1';
-  const aiKeyPresent = Boolean(String(config.openai_api_key || '').trim());
-  const botReady = botEnabled && status.ready;
-  const aiReady = botReady && aiEnabled && aiKeyPresent;
-  const appUrl = String(config.public_app_url || '').trim();
-  const apiUrl = String(config.public_api_url || '').trim();
-  const webhookUrl = apiUrl ? `${apiUrl.replace(/\/$/, '')}/api/whatsapp/webhook` : '';
-  const testTarget = normalizeWhatsAppPhone(config.whatsapp_test_destino || config.whatsapp_numero);
-
-  let blockingReason = '';
-  let message = 'WhatsApp en modo manual';
-
-  if (!botEnabled) {
-    blockingReason = 'bot_disabled';
-    message = 'El bot de WhatsApp esta desactivado.';
-  } else if (status.mode !== 'api') {
-    blockingReason = 'manual_mode';
-    message = 'WhatsApp esta en modo manual. Asi no puede responder mensajes entrantes automaticamente.';
-  } else if (!status.checks.token || !status.checks.phone_number_id) {
-    blockingReason = 'missing_api_credentials';
-    message = 'Faltan credenciales para usar WhatsApp API.';
-  } else if (aiEnabled && !aiKeyPresent) {
-    blockingReason = 'missing_openai_key';
-    message = 'WhatsApp API esta listo, pero la IA no puede responder porque falta la clave de OpenAI.';
-  } else if (aiEnabled) {
-    message = 'WhatsApp API esta listo y la IA quedo habilitada para responder.';
-  } else {
-    message = 'WhatsApp API esta listo. El bot basico puede responder.';
-  }
-
-  res.json({
-    ...status,
-    bot_enabled: botEnabled,
-    bot_ready: botReady,
-    ai_enabled: aiEnabled,
-    ai_ready: aiReady,
-    ai_checks: {
-      openai_key: aiKeyPresent,
-    },
-    production_checks: {
-      public_app_url: isHttpsUrl(appUrl),
-      public_api_url: isHttpsUrl(apiUrl),
-      webhook_public: isPublicHttpsUrl(apiUrl),
-      test_destination: Boolean(testTarget),
-    },
-    blocking_reason: blockingReason,
-    test_target: testTarget,
-    webhook_url: webhookUrl,
-    meta_trial_notice: testTarget
-      ? 'Mientras Meta siga en modo de prueba, solo podras enviar mensajes a numeros agregados en API Setup -> To.'
-      : 'Defini un telefono de prueba para validar el envio desde el panel.',
-    next_steps: buildWhatsAppNextSteps({
-      config,
-      status,
-      botEnabled,
-      aiEnabled,
-      aiKeyPresent,
-      testDestination: testTarget,
-    }),
-    message,
-  });
-});
-
 router.post('/delivery/cotizar', (req, res) => {
   const config = getPublicConfig();
   const direccion = String(req.body?.direccion || '').trim();
@@ -279,6 +374,24 @@ router.post('/backups', auth, requirePermission('config.manage'), (req, res) => 
   const maxFiles = Number(req.body?.maxFiles || getFullConfig().backup_max_archivos || 14);
   const backup = createDatabaseBackup(db, { reason: 'manual', maxFiles });
   res.json(backup);
+});
+
+router.get('/backup/export', auth, requirePermission('config.manage'), (req, res) => {
+  const backup = createDatabaseBackup(db, {
+    reason: 'manual-export',
+    maxFiles: Number(getFullConfig().backup_max_archivos || 14),
+  });
+  const actor = actorFromRequest(req);
+  logAudit(db, {
+    modulo: 'configuracion',
+    accion: 'backup_export',
+    entidad: 'backup',
+    entidad_id: backup.file,
+    actor_id: actor.actor_id,
+    actor_nombre: actor.actor_nombre,
+    detalle: { archivo: backup.file, tamano: backup.size },
+  });
+  return res.download(path.join(backupsDir, backup.file), backup.file);
 });
 
 router.get('/backups/:file/download', auth, requirePermission('config.manage'), (req, res) => {
@@ -314,6 +427,43 @@ router.post('/backups/:file/restore', auth, requirePermission('config.manage'), 
   });
 });
 
+router.post('/backup/import', auth, requirePermission('config.manage'), backupUpload.single('backup'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Debes adjuntar un backup .sqlite' });
+  }
+
+  if (path.extname(req.file.filename).toLowerCase() !== '.sqlite') {
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch {}
+    return res.status(400).json({ error: 'El archivo debe ser .sqlite' });
+  }
+
+  const safetyBackup = createDatabaseBackup(db, {
+    reason: 'pre-import',
+    maxFiles: Number(getFullConfig().backup_max_archivos || 14),
+  });
+  const restored = restoreDatabaseBackup(db, req.file.filename, { mode: 'full' });
+  const actor = actorFromRequest(req);
+  logAudit(db, {
+    modulo: 'configuracion',
+    accion: 'backup_import',
+    entidad: 'backup',
+    entidad_id: req.file.filename,
+    actor_id: actor.actor_id,
+    actor_nombre: actor.actor_nombre,
+    detalle: { archivo: req.file.filename },
+  });
+
+  return res.json({
+    ok: true,
+    message: 'Backup restaurado correctamente',
+    restored,
+    safety_backup: safetyBackup,
+    backups: listBackups(),
+  });
+});
+
 router.post('/reset', auth, requirePermission('config.manage'), (req, res) => {
   if (String(req.body?.confirmacion || '').trim().toUpperCase() !== 'RESET') {
     return res.status(400).json({ error: 'Debes escribir RESET para confirmar' });
@@ -333,52 +483,39 @@ router.post('/reset', auth, requirePermission('config.manage'), (req, res) => {
   });
 });
 
-router.post('/whatsapp/test', auth, requirePermission('config.manage'), async (req, res) => {
-  const config = getFullConfig();
-  const status = getWhatsAppStatus(config);
-  const telefono = normalizeWhatsAppPhone(req.body?.telefono || config.whatsapp_test_destino || config.whatsapp_numero);
-  const mensaje = (req.body?.mensaje || `Prueba de WhatsApp API desde ${config.negocio_nombre || 'Modo Sabor'}`).trim();
+router.post('/reset-operativo', auth, requirePermission('config.manage'), (req, res) => {
+  const backup = createDatabaseBackup(db, {
+    reason: 'pre-reset',
+    maxFiles: Number(getFullConfig().backup_max_archivos || 14),
+  });
 
-  if (!telefono) {
-    return res.status(400).json({ error: 'Falta un telefono de destino para la prueba' });
-  }
+  resetOperationalData(db);
+  const actor = actorFromRequest(req);
+  logAudit(db, {
+    modulo: 'configuracion',
+    accion: 'reset_operativo',
+    entidad: 'sistema',
+    actor_id: actor.actor_id,
+    actor_nombre: actor.actor_nombre,
+    detalle: { backup: backup.file },
+  });
 
-  if (!status.ready) {
-    return res.status(400).json({ error: 'WhatsApp API no esta listo. Revisa token y Phone Number ID.' });
-  }
+  return res.json({
+    ok: true,
+    message: 'Se resetearon los datos operativos. Configuracion, menu, usuarios y personal se conservaron.',
+    backup,
+  });
+});
 
+router.post('/bulk', auth, requirePermission('config.manage'), (req, res) => {
   try {
-    const result = await sendWhatsAppText({ config, to: telefono, body: mensaje });
-    return res.json({
-      ok: true,
-      to: telefono,
-      result,
-      message: 'Mensaje de prueba enviado',
-      next_steps: [
-        'Revisa si el mensaje llego al telefono configurado.',
-        'Despues envia un mensaje real al numero del negocio para validar webhook, inbox y respuesta del bot.',
-      ],
-    });
+    const payload = req.body?.config && typeof req.body.config === 'object'
+      ? req.body.config
+      : req.body;
+    return res.json(persistConfigUpdates(payload, req));
   } catch (error) {
-    const code = Number(error.code || 0) || null;
-    const isAllowedListError = code === 131030;
-
-    return res.status(isAllowedListError ? 409 : 500).json({
-      error: error.message || 'No se pudo enviar el mensaje de prueba',
-      code,
-      hint: error.hint || '',
-      to: telefono,
-      next_steps: isAllowedListError
-        ? [
-            `Agregar ${telefono} en Meta Developers -> WhatsApp -> API Setup -> To.`,
-            'Verificar ese numero dentro de Meta.',
-            'Repetir el boton "Enviar prueba" desde el panel.',
-          ]
-        : [
-            'Revisar token, Phone Number ID y modo API.',
-            'Volver a ejecutar "Probar WhatsApp" para ver los checks.',
-          ],
-    });
+    console.error('[Config Bulk Error]', error.message);
+    return res.status(400).json({ error: error.message || 'No se pudo guardar la configuracion' });
   }
 });
 
@@ -386,18 +523,13 @@ router.put('/', auth, requirePermission('config.manage'), upload.fields([{ name:
   const updates = { ...req.body };
   const logoFile = req.files?.logo?.[0];
   const faviconFile = req.files?.favicon?.[0];
-  if (logoFile) updates.negocio_logo = `/uploads/${logoFile.filename}`;
-  if (faviconFile) updates.negocio_favicon = `/uploads/${faviconFile.filename}`;
-  if (updates.delivery_zonas) {
-    try {
-      updates.delivery_zonas = serializeZones(JSON.parse(updates.delivery_zonas));
-    } catch {
-      return res.status(400).json({ error: 'Las zonas de delivery tienen formato invalido' });
-    }
+  if (logoFile) updates.negocio_logo = uploadPathFromFilename(logoFile.filename);
+  if (faviconFile) updates.negocio_favicon = uploadPathFromFilename(faviconFile.filename);
+  try {
+    return res.json(persistConfigUpdates(updates, req));
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'No se pudo guardar la configuracion' });
   }
-  const stmt = db.prepare('INSERT OR REPLACE INTO configuracion (clave, valor) VALUES (?, ?)');
-  Object.entries(updates).forEach(([k, v]) => stmt.run(k, v));
-  res.json(getFullConfig());
 });
 
 module.exports = router;

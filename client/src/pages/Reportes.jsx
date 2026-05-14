@@ -52,10 +52,10 @@ function csvEscape(value) {
 
 function StatCard({ icon: Icon, label, value, helper, tone = 'orange' }) {
   const tones = {
-    orange: 'bg-orange-100 text-orange-700',
+    orange: 'bg-[#DDE8FF] text-orange-700',
     blue: 'bg-sky-100 text-sky-700',
     emerald: 'bg-emerald-100 text-emerald-700',
-    slate: 'bg-slate-100 text-slate-700',
+    slate: 'bg-gray-100 text-gray-700',
     purple: 'bg-violet-100 text-violet-700',
   };
 
@@ -198,10 +198,10 @@ export default function Reportes() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={() => aplicarPreset('hoy')} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50">Hoy</button>
-          <button onClick={() => aplicarPreset('7d')} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50">7 dias</button>
-          <button onClick={() => aplicarPreset('30d')} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50">30 dias</button>
+          <button onClick={() => aplicarPreset('7d')} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50">7 días</button>
+          <button onClick={() => aplicarPreset('30d')} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50">30 días</button>
           <button onClick={() => aplicarPreset('mes')} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50">Este mes</button>
-          <button onClick={exportarCsv} disabled={!data} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50">
+          <button onClick={exportarCsv} disabled={!data} className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50">
             <Download size={15} />
             Exportar CSV
           </button>
@@ -217,7 +217,7 @@ export default function Reportes() {
                 type="date"
                 value={desde}
                 onChange={(e) => setDesde(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
             <div>
@@ -226,7 +226,7 @@ export default function Reportes() {
                 type="date"
                 value={hasta}
                 onChange={(e) => setHasta(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
           </div>
@@ -234,7 +234,7 @@ export default function Reportes() {
             <button
               onClick={() => cargar()}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#5D87FF] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4a74ef] disabled:opacity-50"
             >
               <CalendarRange size={15} />
               {loading ? 'Consultando...' : 'Actualizar'}
@@ -255,16 +255,16 @@ export default function Reportes() {
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
             <StatCard icon={ShoppingBag} label="Ventas" value={fmt(data.resumen.totalVentas)} helper={`${data.resumen.cantidadPedidos} pedidos`} />
-            <StatCard icon={Wallet} label="Costo estimado" value={fmt(data.resumen.totalCosto)} helper="Costo directo segun ficha de producto" tone="slate" />
+            <StatCard icon={Wallet} label="Costo estimado" value={fmt(data.resumen.totalCosto)} helper="Costo directo según ficha de producto" tone="slate" />
             <StatCard icon={TrendingUp} label="Margen bruto" value={fmt(data.resumen.margenBruto)} helper={`${data.resumen.margenPct}% sobre ventas`} tone="emerald" />
             <StatCard icon={Clock3} label="Ticket promedio" value={fmt(data.resumen.ticketPromedio)} helper={`${data.resumen.tiempoPromedio} min promedio`} tone="blue" />
             <StatCard icon={Users} label="Clientes activos" value={data.resumen.clientesActivos} helper={`${data.clients.recompraPct}% recompra`} tone="emerald" />
             <StatCard icon={Bike} label="Delivery" value={data.resumen.deliveryCount} helper={`${data.delivery.puntualidadPct}% dentro de ETA`} tone="purple" />
-            <StatCard icon={Armchair} label="Salon" value={data.resumen.mesaCount} helper={`${fmt(data.salon.totalVentas)} en mesas`} tone="slate" />
+            <StatCard icon={Armchair} label="Salón" value={data.resumen.mesaCount} helper={`${fmt(data.salon.totalVentas)} en mesas`} tone="slate" />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2">
-            <SectionCard title="Ventas por dia" subtitle={`Del ${format(toDate(data.rango.desde), 'dd/MM', { locale: es })} al ${format(toDate(data.rango.hasta), 'dd/MM', { locale: es })}`}>
+            <SectionCard title="Ventas por día" subtitle={`Del ${format(toDate(data.rango.desde), 'dd/MM', { locale: es })} al ${format(toDate(data.rango.hasta), 'dd/MM', { locale: es })}`}>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={data.series.ventasPorDia}>
@@ -298,7 +298,7 @@ export default function Reportes() {
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2">
-            <SectionCard title="Ventas por turno" subtitle="Sirve para ver que franja del dia empuja mejor las ventas">
+            <SectionCard title="Ventas por turno" subtitle="Sirve para ver qué franja del día empuja mejor las ventas">
               {data.series.ventasPorTurno.length === 0 ? (
                 <EmptyState message="No hay turnos con ventas para este rango." />
               ) : (
@@ -324,7 +324,7 @@ export default function Reportes() {
                             <p className="text-sm font-semibold text-gray-900">{item.turno}</p>
                             <p className="text-xs text-gray-500">{item.pedidos} pedidos · ticket {fmt(item.ticketPromedio)}</p>
                           </div>
-                          <p className="text-sm font-bold text-orange-600">{fmt(item.total)}</p>
+                          <p className="text-sm font-bold text-[#5D87FF]">{fmt(item.total)}</p>
                         </div>
                         <p className="mt-2 text-[11px] text-gray-500">Delivery {item.delivery || 0} · Retiro {item.retiro || 0} · Mesa {item.mesa || 0}</p>
                       </div>
@@ -334,9 +334,9 @@ export default function Reportes() {
               )}
             </SectionCard>
 
-            <SectionCard title="Origen de pedidos" subtitle="Cuanto empuja cada canal del negocio">
+            <SectionCard title="Origen de pedidos" subtitle="Cuánto empuja cada canal del negocio">
               {data.series.ventasPorOrigen.length === 0 ? (
-                <EmptyState message="Sin origenes registrados en este rango." />
+                <EmptyState message="Sin orígenes registrados en este rango." />
               ) : (
                 <div className="space-y-3">
                   {data.series.ventasPorOrigen.map((item) => (
@@ -345,7 +345,7 @@ export default function Reportes() {
                         <p className="text-sm font-semibold capitalize text-gray-900">{item.origen.replace('_', ' ')}</p>
                         <p className="text-xs text-gray-500">{item.pedidos} pedidos</p>
                       </div>
-                      <p className="text-sm font-bold text-slate-900">{fmt(item.total)}</p>
+                      <p className="text-sm font-bold text-gray-900">{fmt(item.total)}</p>
                     </div>
                   ))}
                 </div>
@@ -354,9 +354,9 @@ export default function Reportes() {
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2">
-            <SectionCard title="Zonas de delivery" subtitle="Te muestra donde se concentra el reparto y la facturacion">
+            <SectionCard title="Zonas de delivery" subtitle="Te muestra dónde se concentra el reparto y la facturación">
               {data.delivery.zonas.length === 0 ? (
-                <EmptyState message="Todavia no hay zonas de delivery con ventas." />
+                <EmptyState message="Todavía no hay zonas de delivery con ventas." />
               ) : (
                 <div className="space-y-3">
                   {data.delivery.zonas.map((item) => (
@@ -367,7 +367,7 @@ export default function Reportes() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-gray-900">{item.zona}</p>
-                          <p className="text-xs text-gray-500">{item.pedidos} pedidos · envio {fmt(item.envio)}</p>
+                          <p className="text-xs text-gray-500">{item.pedidos} pedidos · envío {fmt(item.envio)}</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -382,21 +382,21 @@ export default function Reportes() {
           </div>
 
           <div className="grid gap-6 xl:grid-cols-4">
-            <SectionCard title="Top productos" subtitle="Los que mas mueven el negocio">
+            <SectionCard title="Top productos" subtitle="Los que más mueven el negocio">
               {data.products.topProductos.length === 0 ? (
                 <EmptyState message="No hay ventas para este rango." />
               ) : (
                 <div className="space-y-3">
                   {data.products.topProductos.map((item, index) => (
                     <div key={item.nombre} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-orange-100 text-sm font-bold text-orange-700">{index + 1}</div>
+                      <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[#DDE8FF] text-sm font-bold text-orange-700">{index + 1}</div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-gray-900">{item.nombre}</p>
                         <p className="text-xs text-gray-500">{item.categoria}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold text-gray-900">{item.cantidad} uds</p>
-                        <p className="text-xs text-orange-600">{fmt(item.total)}</p>
+                        <p className="text-xs text-[#5D87FF]">{fmt(item.total)}</p>
                         <p className="text-[11px] text-emerald-700">Margen {fmt(item.margen)}</p>
                       </div>
                     </div>
@@ -405,7 +405,7 @@ export default function Reportes() {
               )}
             </SectionCard>
 
-            <SectionCard title="Mas rentables" subtitle="Donde estas ganando mas margen bruto">
+            <SectionCard title="Más rentables" subtitle="Donde estás ganando más margen bruto">
               {data.products.productosRentables.length === 0 ? (
                 <EmptyState message="No hay margen calculable para este rango." />
               ) : (
@@ -451,9 +451,9 @@ export default function Reportes() {
               )}
             </SectionCard>
 
-            <SectionCard title="Categorias" subtitle="Lo que mas factura por rubro">
+            <SectionCard title="Categorías" subtitle="Lo que más factura por rubro">
               {data.products.topCategorias.length === 0 ? (
-                <EmptyState message="Sin categorias con ventas." />
+                <EmptyState message="Sin categorías con ventas." />
               ) : (
                 <div className="space-y-3">
                   {data.products.topCategorias.map((item) => (
@@ -464,7 +464,7 @@ export default function Reportes() {
                           <p className="text-xs text-gray-500">{item.cantidad} unidades vendidas</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-bold text-orange-600">{fmt(item.total)}</p>
+                          <p className="text-sm font-bold text-[#5D87FF]">{fmt(item.total)}</p>
                           <p className="text-[11px] text-emerald-700">Margen {fmt(item.margen)}</p>
                         </div>
                       </div>
@@ -474,7 +474,7 @@ export default function Reportes() {
               )}
             </SectionCard>
 
-            <SectionCard title="Metodos de pago" subtitle="Como esta pagando la gente">
+            <SectionCard title="Métodos de pago" subtitle="Cobros confirmados y pendientes por canal">
               {metodoPagoChart.length === 0 ? (
                 <EmptyState message="Sin movimientos en este rango." />
               ) : (
@@ -496,7 +496,12 @@ export default function Reportes() {
                       <div key={item.metodo_pago} className="flex items-center justify-between gap-3 rounded-2xl bg-gray-50 px-3 py-2.5">
                         <div className="flex items-center gap-2">
                           <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
-                          <span className="text-sm font-medium capitalize text-gray-700">{item.metodo_pago}</span>
+                          <div>
+                            <span className="text-sm font-medium capitalize text-gray-700">{item.metodo_pago}</span>
+                            {item.total_pendiente > 0 ? (
+                              <p className="text-[11px] text-amber-600">Pendiente {fmt(item.total_pendiente)}</p>
+                            ) : null}
+                          </div>
                         </div>
                         <span className="text-sm font-bold text-gray-900">{fmt(item.total)}</span>
                       </div>
@@ -508,7 +513,7 @@ export default function Reportes() {
           </div>
 
           <div className="grid gap-6 xl:grid-cols-3">
-            <SectionCard title="Segmentos CRM" subtitle="Panorama rapido para activar campañas">
+            <SectionCard title="Segmentos CRM" subtitle="Panorama rápido para activar campañas">
               <div className="grid grid-cols-2 gap-3">
                 {[
                   ['VIP', data.clients.segmentos?.vip || 0],
@@ -526,7 +531,7 @@ export default function Reportes() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Clientes mas valiosos" subtitle="Quienes mas compraron en el periodo">
+            <SectionCard title="Clientes más valiosos" subtitle="Quiénes más compraron en el periodo">
               {data.clients.topClientes.length === 0 ? (
                 <EmptyState message="No hubo clientes en este rango." />
               ) : (
@@ -535,17 +540,16 @@ export default function Reportes() {
                     <div key={`${item.nombre}-${item.telefono}`} className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-gray-900">{item.nombre}</p>
-                        <p className="text-xs text-gray-500">{item.telefono || 'Sin telefono'} - {item.pedidos} pedidos</p>
+                        <p className="text-xs text-gray-500">{item.telefono || 'Sin teléfono'} - {item.pedidos} pedidos</p>
                       </div>
-                      <p className="text-sm font-bold text-orange-600">{fmt(item.total)}</p>
+                      <p className="text-sm font-bold text-[#5D87FF]">{fmt(item.total)}</p>
                     </div>
                   ))}
                 </div>
               )}
             </SectionCard>
-
             <SectionCard title="Cumpleaños del mes" subtitle="Ideal para campañas afectivas y cupones de regreso">
-              {data.clients.cumpleMes.length === 0 ? (
+              {data.clients.cumpleMes?.length === 0 ? (
                 <EmptyState message="No hay cumpleaños cargados para este mes." />
               ) : (
                 <div className="space-y-3">
@@ -554,7 +558,7 @@ export default function Reportes() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-gray-900">{item.nombre}</p>
-                          <p className="text-xs text-gray-500">{item.telefono || 'Sin telefono'}</p>
+                          <p className="text-xs text-gray-500">{item.telefono || 'Sin teléfono'}</p>
                         </div>
                         <div className="flex items-center gap-2 text-pink-700">
                           <Cake size={15} />
@@ -582,12 +586,12 @@ export default function Reportes() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-gray-900">{item.nombre}</p>
-                          <p className="text-xs text-gray-500">{item.telefono || 'Sin telefono'}</p>
+                          <p className="text-xs text-gray-500">{item.telefono || 'Sin teléfono'}</p>
                         </div>
                         <p className="text-sm font-bold text-gray-900">{fmt(item.total_gastado)}</p>
                       </div>
                       <p className="mt-1 text-xs text-gray-500">
-                        Ultima compra: {item.ultima_compra ? format(toDate(item.ultima_compra), 'dd/MM/yyyy', { locale: es }) : 'Sin compras entregadas'}
+                        Última compra: {item.ultima_compra ? format(toDate(item.ultima_compra), 'dd/MM/yyyy', { locale: es }) : 'Sin compras entregadas'}
                       </p>
                     </div>
                   ))}
@@ -608,7 +612,7 @@ export default function Reportes() {
                       <p className="mt-1 text-2xl font-bold text-gray-900">{data.delivery.puntualidadPct}%</p>
                     </div>
                     <div className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Desvio ETA</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Desvío ETA</p>
                       <p className="mt-1 text-2xl font-bold text-gray-900">{data.delivery.desviacionPromedioEta} min</p>
                     </div>
                     <div className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
@@ -647,9 +651,9 @@ export default function Reportes() {
               )}
             </SectionCard>
 
-            <SectionCard title="Salon / mesas" subtitle={`${data.salon.totalPedidos} tickets - ticket promedio ${fmt(data.salon.ticketPromedio)}`}>
+            <SectionCard title="Salón / mesas" subtitle={`${data.salon.totalPedidos} tickets - ticket promedio ${fmt(data.salon.ticketPromedio)}`}>
               {data.salon.topMesas.length === 0 ? (
-                <EmptyState message="Sin consumo de salon en este rango." />
+                <EmptyState message="Sin consumo de salón en este rango." />
               ) : (
                 <div className="space-y-3">
                   {data.salon.topMesas.map((item) => (
@@ -666,7 +670,7 @@ export default function Reportes() {
             </SectionCard>
           </div>
 
-          <SectionCard title="Ultimos pedidos del rango" subtitle="Vista rapida para bajar al detalle operativo">
+          <SectionCard title="Últimos pedidos del rango" subtitle="Vista rápida para bajar al detalle operativo">
             {data.recentOrders.length === 0 ? (
               <EmptyState message="No hay pedidos para este rango." />
             ) : (
@@ -709,8 +713,8 @@ export default function Reportes() {
       ) : (
         <div className="rounded-3xl border border-dashed border-gray-200 bg-white px-6 py-16 text-center">
           <Package size={34} className="mx-auto text-gray-300" />
-          <h2 className="mt-4 text-lg font-bold text-gray-900">Todavia no cargaste reportes</h2>
-          <p className="mt-2 text-sm text-gray-500">Elegi un rango y consulta ventas, clientes, delivery y salon.</p>
+          <h2 className="mt-4 text-lg font-bold text-gray-900">Todavía no cargaste reportes</h2>
+          <p className="mt-2 text-sm text-gray-500">Elegí un rango y consultá ventas, clientes, delivery y salón.</p>
         </div>
       )}
     </div>

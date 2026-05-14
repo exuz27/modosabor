@@ -4,9 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd server && npm run dev",
+    "server": "cd server && npm run start",
     "client": "cd client && npm run dev",
-    "setup": "npm install && cd server && npm install && cd ../client && npm install"
+    "setup": "npm install && cd server && npm install && cd ../client && npm install",
+    "smoke": "cd server && npm run smoke",
+    "verify:core": "cd server && npm run verify:core",
+    "verify:operacion": "cd server && npm run verify:operacion",
+    "build": "cd client && npm run build"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

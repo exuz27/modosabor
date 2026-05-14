@@ -18,4 +18,8 @@ export function applyBranding(config = {}) {
   if (config.color_primario) {
     document.documentElement.style.setProperty('--ms-brand-primary', config.color_primario);
   }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ms-branding-updated', { detail: config }));
+  }
 }

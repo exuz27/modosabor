@@ -1,124 +1,437 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import api from '../lib/api.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Search, Plus, Minus, Trash2, ShoppingCart, X, Bike, Store, Armchair, ChevronRight } from 'lucide-react';
+import api from '../lib/api.js';
+import {
+  buildPedidoPayload,
+  calculatePedidoSummary,
+  createDeliveryQuoteState,
+  createEmptyCustomer,
+  getTpvSubmitError,
+  normalizeText,
+  safeParseArray,
+} from '../lib/pedidoForm.js';
+import TpvCatalog from '../components/TPV/TpvCatalog.jsx';
+import TpvClientPickerModal from '../components/TPV/TpvClientPickerModal.jsx';
+import TpvHeader from '../components/TPV/TpvHeader.jsx';
+import TpvSidebar from '../components/TPV/TpvSidebar.jsx';
+import TpvVariantModal from '../components/TPV/TpvVariantModal.jsx';
 
-const fmt = n => `$${Number(n || 0).toLocaleString('es-AR')}`;
 const PAGOS = ['efectivo', 'mercadopago', 'transferencia', 'modo', 'uala'];
 
+function normalizeVariantSelection(variantes) {
+  return Object.entries(variantes || {})
+    .map(([groupName, option]) => ({
+      groupName,
+      optionName: option?.nombre || option || '',
+      precio_extra: Number(option?.precio_extra || 0),
+    }))
+    .filter((entry) => entry.groupName && entry.optionName)
+    .sort((a, b) => normalizeText(a.groupName).localeCompare(normalizeText(b.groupName)));
+}
+
+function normalizeExtraSelection(extras) {
+  return [...(extras || [])]
+    .map((extra) => ({
+      nombre: extra?.nombre || '',
+      precio: Number(extra?.precio || 0),
+    }))
+    .filter((extra) => extra.nombre)
+    .sort((a, b) => normalizeText(a.nombre).localeCompare(normalizeText(b.nombre)));
+}
+
+function buildCartKey(variantes, extras) {
+  return JSON.stringify({
+    variants: normalizeVariantSelection(variantes),
+    extras: normalizeExtraSelection(extras),
+  });
+}
+
+function buildVariantDescription(variantes, variantGroups = []) {
+  const orderedEntries = variantGroups.length > 0
+    ? variantGroups
+      .map((group) => [group.nombre, variantes?.[group.nombre]])
+      .filter(([, value]) => Boolean(value))
+    : normalizeVariantSelection(variantes).map((entry) => [entry.groupName, { nombre: entry.optionName }]);
+
+  return orderedEntries
+    .map(([groupName, value]) => `${groupName}: ${value?.nombre || value}`)
+    .join(', ');
+}
+
+function isEditableTarget(target) {
+  const tag = target?.tagName?.toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable;
+}
+
 export default function TPV() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const searchInputRef = useRef(null);
+  const cartItemsRef = useRef(null);
+
   const [config, setConfig] = useState({});
   const [categorias, setCategorias] = useState([]);
   const [productos, setProductos] = useState([]);
+  const [cajaAbierta, setCajaAbierta] = useState(true);
   const [catActiva, setCatActiva] = useState(null);
   const [busqueda, setBusqueda] = useState('');
   const [items, setItems] = useState([]);
   const [tipoEntrega, setTipoEntrega] = useState('retiro');
   const [mesa, setMesa] = useState('');
   const [metodoPago, setMetodoPago] = useState('efectivo');
-  const [cliente, setCliente] = useState({ nombre: '', telefono: '', direccion: '', latitud: null, longitud: null });
+  const [descuentoTipo, setDescuentoTipo] = useState('monto');
+  const [cliente, setCliente] = useState(createEmptyCustomer);
+  const [clientePickerOpen, setClientePickerOpen] = useState(false);
+  const [clientePickerSearch, setClientePickerSearch] = useState('');
+  const [clientesCatalogo, setClientesCatalogo] = useState([]);
+  const [loadingClientesCatalogo, setLoadingClientesCatalogo] = useState(false);
+  const [repartidores, setRepartidores] = useState([]);
+  const [selectedRiderId, setSelectedRiderId] = useState('');
   const [descuento, setDescuento] = useState(0);
+  const [efectivoRecibido, setEfectivoRecibido] = useState('');
   const [notas, setNotas] = useState('');
   const [variantModal, setVariantModal] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [deliveryQuote, setDeliveryQuote] = useState({ costo_envio: 0, tiempo_estimado_min: 0, zone_name: '', available: true, pending: true, message: '' });
+  const [printingMesa, setPrintingMesa] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(Boolean(document.fullscreenElement));
+  const [lastAddedId, setLastAddedId] = useState(null);
+  const [cartMobileOpen, setCartMobileOpen] = useState(false);
+  const [deliveryQuote, setDeliveryQuote] = useState(() => createDeliveryQuoteState({ tipoEntrega: 'retiro' }));
+
+  const playBeep = () => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const audioCtx = new AudioContext();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime); 
+      gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.1);
+    } catch (e) {
+      console.warn('No se pudo reproducir el sonido:', e);
+    }
+  };
 
   useEffect(() => {
-    Promise.all([api.get('/categorias'), api.get('/productos?activo=1'), api.get('/configuracion')])
-      .then(([cats, prods, conf]) => {
-        setConfig(conf);
-        setCategorias(cats.filter(c => c.activo));
-        setProductos(prods);
+    if (cartItemsRef.current && items.length > 0) {
+      cartItemsRef.current.scrollTo({
+        top: cartItemsRef.current.scrollHeight,
+        behavior: 'smooth',
       });
+    }
+  }, [items.length]);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/categorias'),
+      api.get('/productos?activo=1'),
+      api.get('/configuracion'),
+      api.get('/repartidores').catch(() => []),
+      api.get('/caja/estado').catch(() => null),
+    ])
+      .then(([cats, prods, conf, reps, caja]) => {
+        setConfig(conf);
+        setCategorias(cats.filter((item) => item.activo));
+        setProductos(prods);
+        setRepartidores(reps.filter((item) => item.activo));
+        if (caja) setCajaAbierta(Boolean(caja.activa));
+      })
+      .catch((error) => toast.error(error?.error || 'No se pudo cargar el TPV'));
   }, []);
 
   useEffect(() => {
-    if (tipoEntrega !== 'delivery') {
-      setDeliveryQuote({ costo_envio: 0, tiempo_estimado_min: Number(config.tiempo_retiro || 20), zone_name: '', available: true, pending: false, message: '' });
-      return undefined;
-    }
-
-    const timer = setTimeout(async () => {
-      try {
-        const quote = await api.post('/configuracion/delivery/cotizar', { direccion: cliente.direccion || '' });
-        setDeliveryQuote(quote);
-      } catch {
-        setDeliveryQuote({ costo_envio: Number(config.costo_envio_base || 0), tiempo_estimado_min: Number(config.tiempo_delivery || 30), zone_name: '', available: true, pending: false, message: 'No se pudo calcular la zona ahora' });
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [tipoEntrega, cliente.direccion, config.costo_envio_base, config.tiempo_delivery, config.tiempo_retiro]);
+    const onFullscreenChange = () => setIsBrowserFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
 
   useEffect(() => {
     const tipo = searchParams.get('tipo');
     const mesaParam = searchParams.get('mesa');
-
-    if (tipo && ['delivery', 'retiro', 'mesa'].includes(tipo)) {
-      setTipoEntrega(tipo);
-    }
-
+    if (tipo && ['delivery', 'retiro', 'mesa'].includes(tipo)) setTipoEntrega(tipo);
     if (mesaParam) {
       setTipoEntrega('mesa');
       setMesa(mesaParam);
     }
   }, [searchParams]);
 
-  const productosFiltrados = productos.filter(p => {
-    const matchCat = !catActiva || p.categoria_id === catActiva;
-    const matchQ = !busqueda || p.nombre.toLowerCase().includes(busqueda.toLowerCase());
-    return matchCat && matchQ;
-  });
+  useEffect(() => {
+    if (tipoEntrega !== 'delivery') {
+      setSelectedRiderId('');
+    }
+  }, [tipoEntrega]);
+
+  useEffect(() => {
+    if (tipoEntrega !== 'delivery') {
+      setDeliveryQuote(createDeliveryQuoteState({ tipoEntrega, config }));
+      return undefined;
+    }
+
+    const direccion = String(cliente.direccion || '').trim();
+    if (!direccion) {
+      setDeliveryQuote(createDeliveryQuoteState({ tipoEntrega: 'delivery', config }));
+      return undefined;
+    }
+
+    setDeliveryQuote((previous) => ({
+      ...previous,
+      pending: true,
+      message: 'Calculando envio...',
+    }));
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const quote = await Promise.race([
+          api.post('/configuracion/delivery/cotizar', { direccion }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+        ]);
+        if (cancelled) return;
+        setDeliveryQuote({
+          ...createDeliveryQuoteState({ tipoEntrega: 'delivery', config }),
+          ...quote,
+          pending: false,
+        });
+      } catch {
+        if (cancelled) return;
+        setDeliveryQuote(createDeliveryQuoteState({
+          tipoEntrega: 'delivery',
+          config,
+          overrides: {
+            costo_envio: Number(config.costo_envio_base || 0),
+            available: true,
+            message: 'No se pudo calcular la zona ahora',
+          },
+        }));
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [tipoEntrega, cliente.direccion, config.costo_envio_base, config.tiempo_delivery, config.tiempo_retiro]);
+
+  useEffect(() => {
+    if (tipoEntrega === 'mesa' && clientePickerOpen) {
+      setClientePickerOpen(false);
+    }
+  }, [clientePickerOpen, tipoEntrega]);
+
+  useEffect(() => {
+    if (!clientePickerOpen || tipoEntrega === 'mesa') return undefined;
+
+    const timer = setTimeout(async () => {
+      setLoadingClientesCatalogo(true);
+      try {
+        const query = String(clientePickerSearch || '').trim();
+        const response = await api.get(`/clientes${query ? `?search=${encodeURIComponent(query)}` : ''}`);
+        setClientesCatalogo((response || []).slice(0, 24));
+      } catch (error) {
+        toast.error(error?.error || 'No se pudieron cargar los clientes');
+        setClientesCatalogo([]);
+      } finally {
+        setLoadingClientesCatalogo(false);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [clientePickerOpen, clientePickerSearch, tipoEntrega]);
+
+  const productosFiltrados = useMemo(() => (
+    productos.filter((producto) => {
+      const matchCat = !catActiva || producto.categoria_id === catActiva;
+      const matchSearch = !busqueda || normalizeText(producto.nombre).includes(normalizeText(busqueda));
+      return matchCat && matchSearch;
+    })
+  ), [productos, catActiva, busqueda]);
+  const repartidoresDisponibles = useMemo(
+    () => repartidores.filter((item) => item.activo && (item.disponible || String(item.id) === String(selectedRiderId))),
+    [repartidores, selectedRiderId]
+  );
+  const cartQtyByProductId = useMemo(() => items.reduce((acc, item) => {
+    acc[item.producto_id] = Number(acc[item.producto_id] || 0) + Number(item.cantidad || 0);
+    return acc;
+  }, {}), [items]);
+
+  const summary = useMemo(() => calculatePedidoSummary({
+    items,
+    tipoEntrega,
+    deliveryQuote,
+    descuento,
+    descuentoTipo,
+    metodoPago,
+    efectivoRecibido,
+  }), [items, tipoEntrega, deliveryQuote, descuento, descuentoTipo, metodoPago, efectivoRecibido]);
+  const {
+    subtotal,
+    envio,
+    descuentoAplicado,
+    total,
+    totalItems,
+    efectivoRecibidoNumero,
+    vuelto,
+  } = summary;
+  const variantesCompletas = !variantModal || variantModal.variantes.every((group) => Boolean(variantModal.sel[group.nombre]));
+  const selectedVariantTotal = !variantModal
+    ? 0
+    : Number(variantModal.producto.precio || 0)
+      + Object.values(variantModal.sel).reduce((sum, option) => sum + Number(option?.precio_extra || 0), 0)
+      + variantModal.extrasSel.reduce((sum, extra) => sum + Number(extra.precio || 0), 0);
+  const confirmDisabled = loading || items.length === 0 || (tipoEntrega === 'delivery' && (deliveryQuote.pending || !deliveryQuote.available));
+
+  const limpiar = () => {
+    setItems([]);
+    setCliente(createEmptyCustomer());
+    setClientePickerOpen(false);
+    setClientePickerSearch('');
+    setClientesCatalogo([]);
+    setDescuento(0);
+    setEfectivoRecibido('');
+    setNotas('');
+    setMesa('');
+    setSelectedRiderId('');
+    setDeliveryQuote(createDeliveryQuoteState({ tipoEntrega, config }));
+  };
+
+  const aplicarCliente = (match) => {
+    setCliente((previous) => ({
+      ...previous,
+      nombre: match.nombre || previous.nombre,
+      telefono: match.telefono || previous.telefono,
+      direccion: match.direccion || previous.direccion,
+      latitud: null,
+      longitud: null,
+    }));
+    setClientePickerOpen(false);
+  };
+
+  const abrirSelectorClientes = () => {
+    const initialSearch = String(cliente.telefono || cliente.nombre || '').trim();
+    setClientePickerSearch(initialSearch);
+    setClientePickerOpen(true);
+  };
+
+  const toggleBrowserFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      toast.error('El navegador no permitio cambiar la pantalla completa');
+    }
+  };
+
+  const volverAlPanel = async () => {
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch {}
+    }
+    navigate('/admin/dashboard');
+  };
+
+  const addToCart = (producto, variantes, extras, variantGroups = []) => {
+    playBeep();
+    const cartKey = buildCartKey(variantes, extras);
+    const precioExtra = Object.values(variantes).reduce((sum, option) => sum + Number(option?.precio_extra || 0), 0)
+      + extras.reduce((sum, extra) => sum + Number(extra.precio || 0), 0);
+    const existingIndex = items.findIndex((item) => item.producto_id === producto.id && item.cartKey === cartKey);
+
+    if (existingIndex !== -1) {
+      const updatedItems = [...items];
+      const targetId = updatedItems[existingIndex].id;
+      updatedItems[existingIndex] = {
+        ...updatedItems[existingIndex],
+        cantidad: updatedItems[existingIndex].cantidad + 1,
+      };
+      setItems(updatedItems);
+      setLastAddedId(targetId);
+    } else {
+      const descripcionVariantes = buildVariantDescription(variantes, variantGroups);
+      const descripcionExtras = extras.map((extra) => extra.nombre).join(', ');
+      const newId = `${producto.id}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      setItems((previous) => [
+        ...previous,
+        {
+          id: newId,
+          producto_id: producto.id,
+          nombre: producto.nombre,
+          precio_unitario: Number(producto.precio) + precioExtra,
+          cantidad: 1,
+          variantes,
+          extras,
+          cartKey,
+          descripcion: [descripcionVariantes, descripcionExtras].filter(Boolean).join(' | '),
+        },
+      ]);
+      setLastAddedId(newId);
+    }
+
+    toast.success(`Agregado: ${producto.nombre}`, { 
+      duration: 800, 
+      position: 'bottom-center',
+      style: { borderRadius: '16px', fontWeight: 'bold', fontSize: '13px' }
+    });
+    setVariantModal(null);
+    setTimeout(() => setLastAddedId(null), 800);
+  };
 
   const agregarItem = (producto) => {
-    const variantes = JSON.parse(producto.variantes || '[]');
-    const extras = JSON.parse(producto.extras || '[]');
+    if (producto.disponible_para_venta === false) {
+      toast.error('Ese producto no tiene stock disponible');
+      return;
+    }
+
+    const variantes = safeParseArray(producto.variantes);
+    const extras = safeParseArray(producto.extras);
     if (variantes.length > 0 || extras.length > 0) {
       setVariantModal({ producto, variantes, extras, sel: {}, extrasSel: [] });
       return;
     }
+
     addToCart(producto, {}, []);
   };
 
-  const addToCart = (producto, sel, extrasSel) => {
-    const varKey = JSON.stringify(sel);
-    let precioExtra = 0;
-    Object.values(sel).forEach(o => { if (o?.precio_extra) precioExtra += Number(o.precio_extra); });
-    extrasSel.forEach(e => { precioExtra += Number(e.precio || 0); });
-
-    const existing = items.find(i => i.producto_id === producto.id && i.varKey === varKey);
-    if (existing) {
-      setItems(prev => prev.map(i => i.producto_id === producto.id && i.varKey === varKey ? { ...i, cantidad: i.cantidad + 1 } : i));
-    } else {
-      const descVar = Object.entries(sel).map(([k, v]) => `${k}: ${v.nombre || v}`).join(', ');
-      const descExtra = extrasSel.map(e => e.nombre).join(', ');
-      setItems(prev => [...prev, {
-        id: Date.now(),
-        producto_id: producto.id,
-        nombre: producto.nombre,
-        precio_unitario: Number(producto.precio) + precioExtra,
-        cantidad: 1,
-        variantes: sel,
-        extras: extrasSel,
-        varKey,
-        descripcion: [descVar, descExtra].filter(Boolean).join(' | ')
-      }]);
-    }
-    setVariantModal(null);
+  const seleccionarVariante = (groupName, option) => {
+    setVariantModal((previous) => ({
+      ...previous,
+      sel: {
+        ...previous.sel,
+        [groupName]: typeof option === 'string' ? { nombre: option } : option,
+      },
+    }));
   };
 
-  const cambiarCantidad = (id, d) => {
-    setItems(prev => prev.map(i => i.id === id ? { ...i, cantidad: i.cantidad + d } : i).filter(i => i.cantidad > 0));
+  const toggleExtraVariante = (extra) => {
+    setVariantModal((previous) => {
+      const selected = previous.extrasSel.some((item) => item.nombre === extra.nombre);
+      return {
+        ...previous,
+        extrasSel: selected
+          ? previous.extrasSel.filter((item) => item.nombre !== extra.nombre)
+          : [...previous.extrasSel, extra],
+      };
+    });
   };
 
-  const subtotal = items.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0);
-  const envio = tipoEntrega === 'delivery' ? Number(deliveryQuote.costo_envio || 0) : 0;
-  const total = subtotal + envio - Number(descuento || 0);
+  const cambiarCantidad = (id, delta) => {
+    setItems((previous) => previous
+      .map((item) => (item.id === id ? { ...item, cantidad: item.cantidad + delta } : item))
+      .filter((item) => item.cantidad > 0));
+  };
 
-  const limpiar = () => { setItems([]); setCliente({ nombre: '', telefono: '', direccion: '', latitud: null, longitud: null }); setDescuento(0); setNotas(''); setMesa(''); };
+  const quitarItem = (id) => setItems((previous) => previous.filter((item) => item.id !== id));
 
   const imprimirEnIframe = (html) => {
     const iframe = document.createElement('iframe');
@@ -146,61 +459,83 @@ export default function TPV() {
 
   const abrirImpresion = async (pedidoId, popup) => {
     try {
-      const response = await api.post(`/pedidos/${pedidoId}/imprimir`, { tipo: 'comanda_cocina' });
+      const response = await api.post(`/pedidos/${pedidoId}/imprimir`, { tipo: 'tpv_pack' });
       if (popup) {
         popup.document.open();
         popup.document.write(response.html);
         popup.document.close();
-        toast.success('Comanda lista para imprimir');
       } else {
         imprimirEnIframe(response.html);
-        toast.success('Comanda enviada a impresion');
       }
-    } catch {
+      toast.success(tipoEntrega === 'delivery' ? 'Comanda, ticket y hoja de reparto listos' : 'Comanda y ticket listos para imprimir');
+    } catch (error) {
       if (popup) popup.close();
-      toast.error('No se pudo generar la comanda');
+      toast.error(error?.error || 'No se pudieron generar los documentos');
+    }
+  };
+
+  const imprimirPrecuentaMesa = async () => {
+    if (!String(mesa || '').trim()) {
+      toast.error('Indica una mesa para imprimir la precuenta');
+      return;
+    }
+
+    setPrintingMesa(true);
+    try {
+      const response = await api.post(`/pedidos/mesa/${encodeURIComponent(String(mesa).trim())}/precuenta`, {});
+      imprimirEnIframe(response.html);
+      toast.success(`Precuenta lista para mesa ${mesa}`);
+    } catch (error) {
+      toast.error(error?.error || 'No se pudo generar la precuenta');
+    } finally {
+      setPrintingMesa(false);
     }
   };
 
   const confirmar = async (imprimir = false) => {
-    if (items.length === 0) return toast.error('Agregá productos al pedido');
-    if (tipoEntrega === 'delivery' && !cliente.nombre) return toast.error('Nombre requerido para delivery');
-    if (tipoEntrega === 'delivery' && !cliente.direccion) return toast.error('Direccion requerida para delivery');
-    if (tipoEntrega === 'delivery' && !deliveryQuote.available && !deliveryQuote.pending) {
-      return toast.error(deliveryQuote.message || 'La direccion no pertenece a una zona valida');
-    }
+    const submitError = getTpvSubmitError({
+      items,
+      tipoEntrega,
+      cliente,
+      deliveryQuote,
+      mesa,
+      metodoPago,
+      efectivoRecibido,
+      efectivoRecibidoNumero,
+      total,
+    });
+    if (submitError) return toast.error(submitError);
+
     const shouldAutoPrint = imprimir || config.impresion_auto_tpv === '1';
     let popup = null;
+
     if (imprimir) {
       popup = window.open('', '_blank', 'width=900,height=700');
-      if (!popup) {
-        toast.error('Permiti las ventanas emergentes para imprimir');
-        return;
-      }
+      if (!popup) return toast.error('Permiti las ventanas emergentes para imprimir');
       popup.document.write('<p style="font-family: Arial, sans-serif; padding: 24px;">Preparando impresion...</p>');
       popup.document.close();
     }
 
     setLoading(true);
     try {
-      const pedidoItems = items.map(i => ({
-        producto_id: i.producto_id, nombre: i.nombre, cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario, variantes: i.variantes, extras: i.extras, descripcion: i.descripcion
+      const pedido = await api.post('/pedidos/interno', buildPedidoPayload({
+        customer: cliente,
+        items,
+        summary,
+        tipoEntrega,
+        mesa,
+        metodoPago,
+        notas,
+        origen: 'tpv',
+        repartidorId: tipoEntrega === 'delivery' && selectedRiderId ? Number(selectedRiderId) : undefined,
       }));
-      const pedido = await api.post('/pedidos/interno', {
-        cliente_nombre: cliente.nombre, cliente_telefono: cliente.telefono, cliente_direccion: cliente.direccion,
-        cliente_latitud: cliente.latitud, cliente_longitud: cliente.longitud,
-        items: pedidoItems, subtotal, costo_envio: envio, descuento: Number(descuento || 0), total,
-        tipo_entrega: tipoEntrega, mesa, metodo_pago: metodoPago, notas, origen: 'tpv'
-      });
-      toast.success(shouldAutoPrint ? 'Pedido creado y enviado a impresion' : 'Pedido creado');
-      if (shouldAutoPrint) {
-        await abrirImpresion(pedido.id, popup);
-      }
+
+      if (shouldAutoPrint) await abrirImpresion(pedido.id, popup);
+      toast.success(shouldAutoPrint ? 'Pedido creado e impreso' : 'Pedido creado');
       limpiar();
-    } catch {
+    } catch (error) {
       if (popup) popup.close();
-      toast.error('Error al crear pedido');
+      toast.error(error?.error || 'Error al crear pedido');
     } finally {
       setLoading(false);
     }
@@ -211,16 +546,17 @@ export default function TPV() {
       toast.error('Este dispositivo no permite geolocalizacion');
       return;
     }
+
     setSharingLocation(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setCliente((prev) => ({
-          ...prev,
+        setCliente((previous) => ({
+          ...previous,
           latitud: position.coords.latitude,
           longitud: position.coords.longitude,
         }));
         setSharingLocation(false);
-        toast.success('Ubicacion del cliente guardada');
+        toast.success('Ubicacion guardada');
       },
       () => {
         setSharingLocation(false);
@@ -230,214 +566,177 @@ export default function TPV() {
     );
   };
 
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const key = event.key.toLowerCase();
+
+      if (event.key === 'Escape') {
+        if (variantModal) {
+          event.preventDefault();
+          setVariantModal(null);
+          return;
+        }
+        if (clientePickerOpen) {
+          event.preventDefault();
+          setClientePickerOpen(false);
+          return;
+        }
+        if (document.fullscreenElement) {
+          event.preventDefault();
+          document.exitFullscreen().catch(() => {});
+        }
+        return;
+      }
+
+      if (isEditableTarget(event.target)) return;
+
+      if (event.key === '/') {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === 'F9') {
+        event.preventDefault();
+        toggleBrowserFullscreen();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        confirmar(Boolean(event.shiftKey));
+        return;
+      }
+
+      if (event.altKey && key === 'p') {
+        event.preventDefault();
+        volverAlPanel();
+        return;
+      }
+
+      if (event.altKey && ['1', '2', '3'].includes(event.key)) {
+        event.preventDefault();
+        setTipoEntrega(event.key === '1' ? 'retiro' : event.key === '2' ? 'delivery' : 'mesa');
+        return;
+      }
+
+      if (event.altKey) {
+        const paymentMap = { e: 'efectivo', m: 'mercadopago', t: 'transferencia', o: 'modo', u: 'uala' };
+        if (paymentMap[key]) {
+          event.preventDefault();
+          setMetodoPago(paymentMap[key]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [variantModal, clientePickerOpen, cliente, config, deliveryQuote, efectivoRecibidoNumero, items, mesa, metodoPago, total]);
+
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* LEFT */}
-      <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden">
-        <div className="p-3 bg-white border-b">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar producto..."
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500" />
-          </div>
-        </div>
-        <div className="flex gap-2 px-3 py-2 bg-white border-b overflow-x-auto">
-          <button onClick={() => setCatActiva(null)} className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${!catActiva ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Todos</button>
-          {categorias.map(c => (
-            <button key={c.id} onClick={() => setCatActiva(c.id)} className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${catActiva === c.id ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              <span>{c.icono}</span> {c.nombre}
-            </button>
-          ))}
-        </div>
-        <div className="flex-1 overflow-y-auto p-3">
-          <div className="grid grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5">
-            {productosFiltrados.map(p => (
-              <button key={p.id} onClick={() => agregarItem(p)}
-                className="bg-white border border-gray-200 rounded-xl p-3 text-left hover:border-orange-400 hover:shadow-md transition-all active:scale-95">
-                <div className="aspect-square bg-gray-100 rounded-lg mb-2 overflow-hidden flex items-center justify-center">
-                  {p.imagen ? <img src={p.imagen} alt={p.nombre} className="w-full h-full object-cover" /> : <span className="text-3xl">{p.categoria_icono || '🍽️'}</span>}
-                </div>
-                <p className="text-xs font-semibold text-gray-900 leading-tight line-clamp-2">{p.nombre}</p>
-                <p className="text-orange-600 font-bold text-sm mt-1">{fmt(p.precio)}</p>
-                {p.destacado === 1 && <span className="text-xs text-orange-500">⭐</span>}
-              </button>
-            ))}
-          </div>
-          {productosFiltrados.length === 0 && <p className="text-center text-gray-400 text-sm mt-8">Sin productos</p>}
-        </div>
-      </div>
+    <div className="flex h-[100dvh] min-h-0 bg-[#F4F7FB] text-gray-900 font-sans">
+      <div className="flex min-h-0 flex-1 flex-col">
 
-      {/* RIGHT - Ticket */}
-      <div className="w-80 bg-white border-l flex flex-col shadow-lg">
-        <div className="p-3 border-b">
-          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-            {[{v:'retiro',l:'Retira',I:Store},{v:'delivery',l:'Delivery',I:Bike},{v:'mesa',l:'Mesa',I:Armchair}].map(({v,l,I}) => (
-              <button key={v} onClick={() => setTipoEntrega(v)}
-                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${tipoEntrega === v ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500'}`}>
-                <I size={13} /> {l}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* ── Header Estilo Modernize ── */}
+        <TpvHeader
+          cajaAbierta={cajaAbierta}
+          isBrowserFullscreen={isBrowserFullscreen}
+          onBack={volverAlPanel}
+          onGoCaja={() => navigate('/admin/caja')}
+          onToggleFullscreen={toggleBrowserFullscreen}
+        />
 
-        <div className="p-3 border-b space-y-1.5">
-          {tipoEntrega === 'mesa' ? (
-            <input value={mesa} onChange={e => setMesa(e.target.value)} placeholder="Número de mesa"
-              className="w-full text-sm border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500" />
-          ) : (
-            <>
-              <input value={cliente.nombre} onChange={e => setCliente({ ...cliente, nombre: e.target.value })} placeholder="Nombre del cliente"
-                className="w-full text-sm border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500" />
-              <input value={cliente.telefono} onChange={e => setCliente({ ...cliente, telefono: e.target.value })} placeholder="Teléfono"
-                className="w-full text-sm border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500" />
-              {tipoEntrega === 'delivery' && (
-                <>
-                  <input value={cliente.direccion} onChange={e => setCliente({ ...cliente, direccion: e.target.value })} placeholder="Dirección de entrega"
-                    className="w-full text-sm border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500" />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={compartirUbicacionCliente}
-                      disabled={sharingLocation}
-                      className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-50"
-                    >
-                      {sharingLocation ? 'Tomando ubicacion...' : (cliente.latitud && cliente.longitud ? 'Actualizar ubicacion precisa' : 'Guardar ubicacion precisa')}
-                    </button>
-                    {cliente.latitud && cliente.longitud ? <span className="text-[11px] font-semibold text-emerald-700">Mejora ETA del rider</span> : null}
-                  </div>
-                  <div className={`rounded-xl border px-3 py-2 text-xs ${deliveryQuote.available ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : deliveryQuote.pending ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
-                    {deliveryQuote.pending ? 'Escribí la dirección para calcular envío y demora.' : deliveryQuote.message}
-                    {deliveryQuote.available && !deliveryQuote.pending ? (
-                      <div className="mt-1 font-semibold">
-                        Zona: {deliveryQuote.zone_name || 'General'} · Envío: {fmt(deliveryQuote.costo_envio)} · ETA: {deliveryQuote.tiempo_estimado_min || config.tiempo_delivery || 30} min
-                      </div>
-                    ) : null}
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {items.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <ShoppingCart size={36} className="mx-auto mb-2 opacity-25" />
-              <p className="text-sm">Agregá productos</p>
-            </div>
-          ) : items.map(item => (
-            <div key={item.id} className="flex items-start gap-2 py-2 border-b border-gray-50 last:border-0">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 leading-tight">{item.nombre}</p>
-                {item.descripcion && <p className="text-xs text-gray-400 leading-tight mt-0.5">{item.descripcion}</p>}
-                <p className="text-sm font-bold text-orange-600 mt-0.5">{fmt(item.precio_unitario * item.cantidad)}</p>
-              </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button onClick={() => cambiarCantidad(item.id, -1)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center hover:bg-red-100 transition-colors"><Minus size={11} /></button>
-                <span className="w-5 text-center text-sm font-bold">{item.cantidad}</span>
-                <button onClick={() => cambiarCantidad(item.id, 1)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center hover:bg-green-100 transition-colors"><Plus size={11} /></button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="p-3 border-t space-y-2.5 bg-gray-50">
-          <div className="space-y-1 text-sm">
-            <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
-            {tipoEntrega === 'delivery' && <div className="flex justify-between text-gray-600"><span>Envío</span><span>{fmt(envio)}</span></div>}
-            {tipoEntrega === 'delivery' && deliveryQuote.zone_name && <div className="flex justify-between text-gray-600"><span>Zona</span><span>{deliveryQuote.zone_name}</span></div>}
-            {tipoEntrega === 'delivery' && <div className="flex justify-between text-gray-600"><span>ETA</span><span>{deliveryQuote.tiempo_estimado_min || config.tiempo_delivery || 30} min</span></div>}
-            <div className="flex items-center gap-2">
-              <span className="text-gray-600 text-sm">Descuento $</span>
-              <input type="number" value={descuento} onChange={e => setDescuento(e.target.value)} min={0}
-                className="flex-1 text-sm border rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-500 text-right" />
-            </div>
-            <div className="flex justify-between font-bold text-base pt-1 border-t border-gray-200">
-              <span>Total</span><span className="text-orange-600">{fmt(total)}</span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-1">
-            {PAGOS.map(m => (
-              <button key={m} onClick={() => setMetodoPago(m)}
-                className={`flex-1 min-w-0 px-1 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${metodoPago === m ? 'bg-orange-500 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
-                {m === 'mercadopago' ? 'MP' : m}
-              </button>
-            ))}
-          </div>
-
-          <input value={notas} onChange={e => setNotas(e.target.value)} placeholder="Notas..."
-            className="w-full text-xs border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white" />
-
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={limpiar} disabled={items.length === 0} className="py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-40 transition-colors bg-white">
-              Limpiar
-            </button>
-            <button onClick={() => confirmar(false)} disabled={loading || items.length === 0 || (tipoEntrega === 'delivery' && !deliveryQuote.available && !deliveryQuote.pending)}
-              className="py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold disabled:opacity-40 transition-colors">
-              {loading ? '...' : 'Confirmar'}
-            </button>
-            <button onClick={() => confirmar(true)} disabled={loading || items.length === 0 || (tipoEntrega === 'delivery' && !deliveryQuote.available && !deliveryQuote.pending)}
-              className="py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold disabled:opacity-40 transition-colors">
-              {loading ? '...' : 'Confirmar + comanda'}
-            </button>
-          </div>
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          <TpvCatalog
+            busqueda={busqueda}
+            cartQtyByProductId={cartQtyByProductId}
+            catActiva={catActiva}
+            categorias={categorias}
+            onAddItem={agregarItem}
+            onBusquedaChange={setBusqueda}
+            onCatActivaChange={setCatActiva}
+            onOpenCart={() => setCartMobileOpen(true)}
+            productosFiltrados={productosFiltrados}
+            searchInputRef={searchInputRef}
+            total={total}
+            totalItems={totalItems}
+          />
+          <TpvSidebar
+            cartItemsRef={cartItemsRef}
+            cartMobileOpen={cartMobileOpen}
+            cliente={cliente}
+            confirmDisabled={confirmDisabled}
+            config={config}
+            deliveryQuote={deliveryQuote}
+            descuento={descuento}
+            descuentoAplicado={descuentoAplicado}
+            descuentoTipo={descuentoTipo}
+            efectivoRecibido={efectivoRecibido}
+            envio={envio}
+            items={items}
+            lastAddedId={lastAddedId}
+            loading={loading}
+            mesa={mesa}
+            metodoPago={metodoPago}
+            onAbrirSelectorClientes={abrirSelectorClientes}
+            onCambiarCantidad={cambiarCantidad}
+            onCerrarCartMobile={() => setCartMobileOpen(false)}
+            onClearCliente={() => setCliente(createEmptyCustomer())}
+            onClearOrder={() => {
+              limpiar();
+              setCartMobileOpen(false);
+            }}
+            onConfirm={() => confirmar(false)}
+            onConfirmPrint={() => confirmar(true)}
+            onDescuentoChange={setDescuento}
+            onDescuentoTipoChange={setDescuentoTipo}
+            onEfectivoRecibidoChange={setEfectivoRecibido}
+            onImprimirMesa={imprimirPrecuentaMesa}
+            onMetodoPagoChange={setMetodoPago}
+            onQuitarItem={quitarItem}
+            onSeleccionarRider={setSelectedRiderId}
+            onSetCliente={setCliente}
+            onSetMesa={setMesa}
+            onTipoEntregaChange={setTipoEntrega}
+            onUbicacionCliente={compartirUbicacionCliente}
+            pagos={PAGOS}
+            printingMesa={printingMesa}
+            repartidoresDisponibles={repartidoresDisponibles}
+            selectedRiderId={selectedRiderId}
+            sharingLocation={sharingLocation}
+            subtotal={subtotal}
+            tipoEntrega={tipoEntrega}
+            total={total}
+            totalItems={totalItems}
+            vuelto={vuelto}
+          />
         </div>
       </div>
+      {clientePickerOpen ? (
+        <TpvClientPickerModal
+          clientesCatalogo={clientesCatalogo}
+          loadingClientesCatalogo={loadingClientesCatalogo}
+          onApplyCliente={aplicarCliente}
+          onClose={() => setClientePickerOpen(false)}
+          onSearchChange={setClientePickerSearch}
+          search={clientePickerSearch}
+        />
+      ) : null}
 
-      {/* Variant Modal */}
-      {variantModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setVariantModal(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="font-bold text-lg text-gray-900">{variantModal.producto.nombre}</h3>
-              <button onClick={() => setVariantModal(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
-            </div>
-
-            {variantModal.variantes.map(v => (
-              <div key={v.nombre} className="mb-5">
-                <p className="font-semibold text-gray-800 mb-2 text-sm">{v.nombre}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(v.opciones || []).map(opt => {
-                    const oNombre = opt.nombre || opt;
-                    const selected = variantModal.sel[v.nombre]?.nombre === oNombre;
-                    return (
-                      <button key={oNombre} onClick={() => setVariantModal(p => ({ ...p, sel: { ...p.sel, [v.nombre]: typeof opt === 'string' ? { nombre: opt } : opt } }))}
-                        className={`p-3 border-2 rounded-xl text-sm text-left transition-colors ${selected ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                        <span className="font-medium">{oNombre}</span>
-                        {opt.precio_extra > 0 && <span className="text-orange-600 text-xs block">+{fmt(opt.precio_extra)}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-
-            {variantModal.extras.length > 0 && (
-              <div className="mb-5">
-                <p className="font-semibold text-gray-800 mb-2 text-sm">Extras</p>
-                <div className="space-y-2">
-                  {variantModal.extras.map(e => {
-                    const sel = variantModal.extrasSel.some(x => x.nombre === e.nombre);
-                    return (
-                      <button key={e.nombre} onClick={() => setVariantModal(p => ({ ...p, extrasSel: sel ? p.extrasSel.filter(x => x.nombre !== e.nombre) : [...p.extrasSel, e] }))}
-                        className={`w-full flex items-center justify-between p-3 border-2 rounded-xl transition-colors ${sel ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                        <span className="text-sm font-medium">{e.nombre}</span>
-                        <span className="text-orange-600 text-sm font-medium">+{fmt(e.precio)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <button onClick={() => addToCart(variantModal.producto, variantModal.sel, variantModal.extrasSel)}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl transition-colors">
-              Agregar al pedido
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ── Modal de variantes / extras ── */}
+      {variantModal ? (
+        <TpvVariantModal
+          onAddToCart={() => addToCart(variantModal.producto, variantModal.sel, variantModal.extrasSel, variantModal.variantes)}
+          onClose={() => setVariantModal(null)}
+          onSelectVariant={seleccionarVariante}
+          onToggleExtra={toggleExtraVariante}
+          selectedVariantTotal={selectedVariantTotal}
+          variantesCompletas={variantesCompletas}
+          variantModal={variantModal}
+        />
+      ) : null}
     </div>
   );
 }
+

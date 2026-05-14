@@ -6,15 +6,23 @@ const router = express.Router();
 const db = require('../db');
 const auth = require('../middleware/auth');
 const { requirePermission } = require('../utils/permissions');
-
-const uploadDir = path.join(__dirname, '../uploads');
+const { uploadsDir, uploadPathFromFilename, uploadPublicPathToFile } = require('../utils/storagePaths');
+const { createFileFilter, IMAGE_EXTENSIONS, IMAGE_MIME_TYPES } = require('../utils/uploadValidation');
 
 const storage = multer.diskStorage({
-  destination: uploadDir,
-  filename: (_req, file, cb) => cb(null, `categoria-${Date.now()}${path.extname(file.originalname)}`),
+  destination: uploadsDir,
+  filename: (_req, file, cb) => cb(null, `categoria-${Date.now()}${String(path.extname(file.originalname) || '').toLowerCase()}`),
 });
 
-const upload = multer({ storage, limits: { fileSize: 4 * 1024 * 1024 } });
+const upload = multer({
+  storage,
+  limits: { fileSize: 4 * 1024 * 1024 },
+  fileFilter: createFileFilter({
+    allowedExtensions: IMAGE_EXTENSIONS,
+    allowedMimeTypes: IMAGE_MIME_TYPES,
+    message: 'La imagen debe ser JPG, PNG, WEBP o GIF',
+  }),
+});
 
 function parseSubcategorias(value) {
   if (!value) return [];
@@ -40,8 +48,7 @@ function normalizeCategoria(row) {
 }
 
 function imagePathToFile(imagen) {
-  if (!imagen) return null;
-  return path.join(__dirname, '..', imagen.replace(/^\/+/, ''));
+  return uploadPublicPathToFile(imagen);
 }
 
 router.get('/', (_req, res) => {
@@ -60,7 +67,7 @@ router.post('/', auth, requirePermission('productos.edit'), upload.single('image
   if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
 
   const subcategorias = JSON.stringify(parseSubcategorias(req.body.subcategorias));
-  const imagen = req.file ? `/uploads/${req.file.filename}` : '';
+  const imagen = uploadPathFromFilename(req.file?.filename);
 
   const result = db
     .prepare('INSERT INTO categorias (nombre, icono, color, orden, activo, imagen, subcategorias) VALUES (?, ?, ?, ?, ?, ?, ?)')
@@ -81,7 +88,7 @@ router.put('/:id', auth, requirePermission('productos.edit'), upload.single('ima
   const activo = req.body.activo ?? existing.activo;
   const subcategorias = JSON.stringify(parseSubcategorias(req.body.subcategorias ?? existing.subcategorias));
   const wantsRemoveImage = String(req.body.remove_imagen || '0') === '1';
-  const imagen = req.file ? `/uploads/${req.file.filename}` : wantsRemoveImage ? '' : existing.imagen || '';
+  const imagen = req.file ? uploadPathFromFilename(req.file.filename) : wantsRemoveImage ? '' : existing.imagen || '';
 
   if ((req.file || wantsRemoveImage) && existing.imagen) {
     const oldFile = imagePathToFile(existing.imagen);

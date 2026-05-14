@@ -27,40 +27,40 @@ const CATEGORY_DEFS = [
 
 const MENU = {
   Pizzas: [
-    ['Común', 'Prepizza, salsa, queso, aceitunas, orégano.', '$6.000', '$3.500'],
-    ['Común con huevo', 'Prepizza, salsa, queso, huevo rallado, aceitunas, orégano.', '$7.000', '$4.000'],
-    ['Al Ajillo', 'Prepizza, salsa, queso, chimichurri pizzero, aceitunas, orégano.', '$6.500', '$3.750'],
-    ['Napolitana', 'Prepizza, salsa, queso, rodajas de tomate, chimichurri pizzero, aceitunas, orégano.', '$7.000', '$4.000'],
-    ['Napolitana Especial', 'Prepizza, salsa, queso, Jamón, rodajas de tomate, chimichurri pizzero, aceitunas, orégano.', '$8.000', '$4.500'],
-    ['Jamón y Morrones', 'Prepizza, salsa, queso, Jamón, morrones, chimichurri pizzero, aceitunas, orégano.', '$8.000', '$4.500'],
-    ['Choclo', 'Prepizza, salsa, queso, Choclo en crema, aceitunas, orégano.', '$8.000', '$4.500'],
-    ['4 Quesos', 'Prepizza, salsa, queso, 4 tipos de quesos en hebras, aceitunas, orégano.', '$8.500', '$4.750'],
-    ['Roquefort', 'Prepizza, salsa, queso, roquefort, aceitunas, orégano.', '$8.500', '$4.750'],
-    ['Pepperoni', 'Prepizza, salsa, queso, rodajas de peperoni, chimichurri pizzero, aceitunas, orégano.', '$9.000', '$5.000'],
-    ['Rúcula y Panceta', 'Prepizza, salsa, queso, hojas de rúcula, panceta salteada, aceitunas, orégano.', '$9.000', '$5.000'],
-    ['Full Cheddar', 'Prepizza, salsa, queso, papas fritas, panceta salteada, y mucho cheddar, aceitunas, orégano.', '$10.000', '$5.500'],
+    ['Com\u00fan', 'Salsa, queso', '$6.000', '$3.500'],
+    ['Com\u00fan con huevo', 'Queso + huevo', '$7.000', '$4.000'],
+    ['Al ajillo', 'Chimichurri', '$6.500', '$3.750'],
+    ['Napolitana', 'Tomate', '$7.000', '$4.000'],
+    ['Napolitana Especial', 'Jamon', '$8.000', '$4.500'],
+    ['Jam\u00f3n y morrones', 'Jamon + morrones', '$8.000', '$4.500'],
+    ['Choclo', 'Choclo', '$8.000', '$4.500'],
+    ['4 Quesos', 'Mix quesos', '$8.500', '$4.750'],
+    ['Roquefort', 'Roquefort', '$8.500', '$4.750'],
+    ['Pepperoni', 'Pepperoni', '$9.000', '$5.000'],
+    ['R\u00facula y panceta', 'Rucula', '$9.000', '$5.000'],
+    ['Full Cheddar', 'Papas + cheddar', '$10.000', '$5.500'],
   ],
   Empanadas: [
-    ['Pollo', 'Empanadas de pollo jugoso, sazonadas con especias y cebolla.', '$7.000', '$4.000'],
-    ['Jamón y Queso', 'Empanadas rellenas de jamón cocido y queso derretido.', '$7.000', '$4.000'],
-    ['Matambre', 'Empanadas de matambre tierno, tradicionales y sabrosas.', '$10.000', '$5.500'],
-    ['Verdura', 'Empanadas de verduras frescas: acelga, cebolla y huevo.', '$7.000', '$4.000'],
-    ['Mondongo', 'Empanadas de mondongo, un clásico tradicional argentino.', '$8.000', '$4.500'],
+    ['Pollo', 'Empanadas sabor pollo.', '$7.000', '$4.000'],
+    ['Jam\u00f3n y queso', 'Empanadas sabor jamon y queso.', '$7.000', '$4.000'],
+    ['Verdura', 'Empanadas sabor verdura.', '$7.000', '$4.000'],
+    ['Mondongo', 'Empanadas sabor mondongo.', '$8.000', '$4.500'],
+    ['Matambre', 'Empanadas sabor matambre.', '$10.000', '$5.500'],
   ],
   Milanesas: [
-    ['Clásica', 'Milanesa de ternera o pollo. Simple, crocante y rendidora. La de siempre, la que nunca falla.', '$10.000', '$8.500'],
-    ['a Caballo', 'Milanesa de ternera o pollo, con dos huevos fritos.', '$11.000', '$9.500'],
-    ['Napolitana', 'Salsa de tomate + queso + jamón cocido opcional + orégano + rodajas de tomate + morrones + aceitunas. La más elegida. Jugosa, gratinada y bien clásica.', '$12.000', '$10.500'],
-    ['4 Quesos', 'Mila clásica + queso + 4 variedades de quesos.', '$12.000', '$10.500'],
-    ['Roquefort', 'Mila clásica + queso + queso Roquefort.', '$12.000', '$10.500'],
-    ['Modo Suiza', 'Milanesa + jamón cocido + salsa blanca cremosa (bechamel) + queso gratinado. Opcional pro: toque de parmesano arriba.', '$12.000', '$10.500'],
-    ['Modo Cheddar', 'Milanesa + cheddar + panceta (bacon) + verdeo/ciboulette.', '$12.000', '$10.500'],
-    ['Modo Sabor BBQ', 'Milanesa + cheddar + panceta (bacon) + cebolla caramelizada + 2 huevos fritos + salsa barbacoa.', '$15.000', '$13.500'],
-    ['Mediterránea', 'Milanesa + muzzarella + rúcula + parmesano + tomates cherry confitados + (opcional) aceite de oliva.', '$13.000', '$11.500'],
-    ['Dulce Picante', 'Milanesa + muzzarella + morrones asados + cebolla crispy + salsa picante agridulce (ají y ajo) + salsa fresca de tomate y cebolla con limón + verdeo.', '$13.000', '$11.500'],
+    ['Cl\u00e1sica', 'Milanesa clasica.', '$10.000', '$8.500'],
+    ['A caballo', 'Milanesa a caballo.', '$11.000', '$9.500'],
+    ['Napolitana', 'Milanesa napolitana.', '$12.000', '$10.500'],
+    ['4 Quesos', 'Milanesa cuatro quesos.', '$12.000', '$10.500'],
+    ['Roquefort', 'Milanesa roquefort.', '$12.000', '$10.500'],
+    ['Suiza', 'Milanesa suiza.', '$12.000', '$10.500'],
+    ['Modo Cheddar', 'Milanesa cheddar.', '$12.000', '$10.500'],
+    ['Mediterr\u00e1nea', 'Milanesa mediterranea.', '$13.000', '$11.500'],
+    ['Dulce Picante', 'Milanesa dulce picante.', '$13.000', '$11.500'],
+    ['BBQ', 'Milanesa BBQ.', '$15.000', '$13.500'],
   ],
   Papas: [
-    ['Papas Full Cheddar', '500 gramos de papas, 200 gramos de queso cheddar, 50 gramos de panceta y cebolla de verdeo.', '$7.000'],
+    ['Papas Full Cheddar', 'Papas Full Cheddar.', '$7.000'],
   ],
 };
 
@@ -146,8 +146,8 @@ const updateCategory = db.prepare('UPDATE categorias SET icono = ?, color = ?, o
 const selectProducts = db.prepare('SELECT * FROM productos');
 const insertProduct = db.prepare(`
   INSERT INTO productos (
-    nombre, descripcion, precio, costo, categoria_id, imagen, variantes, extras, activo, destacado, tiempo_preparacion
-  ) VALUES (?, ?, ?, ?, ?, '', ?, ?, 1, 0, ?)
+    nombre, descripcion, precio, costo, categoria_id, imagen, variantes, extras, activo, destacado, tiempo_preparacion, stock_directo, stock_mode
+  ) VALUES (?, ?, ?, ?, ?, '', ?, ?, 1, 0, ?, ?, ?)
 `);
 const updateProduct = db.prepare(`
   UPDATE productos
@@ -206,7 +206,9 @@ for (const [categoryName, rows] of Object.entries(MENU)) {
         categoriaId,
         payload.variantes,
         payload.extras,
-        payload.tiempo_preparacion
+        payload.tiempo_preparacion,
+        999,
+        'direct'
       );
       inserted += 1;
     }

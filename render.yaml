@@ -1,0 +1,38 @@
+services:
+  # Servicio del Backend (API + Base de Datos + Sockets)
+  - type: web
+    name: modosabor-api
+    env: node
+    plan: free
+    buildCommand: npm install && cd server && npm install
+    startCommand: cd server && npm start
+    disk:
+      name: modosabor-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /opt/render/project/src/server/data/modosabor.db
+      - key: UPLOADS_DIR
+        value: /opt/render/project/src/server/data/uploads
+      - key: BACKUPS_DIR
+        value: /opt/render/project/src/server/data/backups
+
+  # Servicio del Frontend (Interfaz Web y App Rider)
+  - type: static
+    name: modosabor-app
+    env: static
+    buildCommand: cd client && npm install && npm run build
+    publishPath: ./client/dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: modosabor-api
+          property: host
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

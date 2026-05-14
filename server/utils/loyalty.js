@@ -8,13 +8,15 @@ function levelFromPoints(points) {
   return 'Bronce';
 }
 
-function computeRewardState(totalPedidos, canjesPremio) {
+function computeRewardState(totalPedidos, canjesHistoricos) {
   const delivered = Math.max(0, Number(totalPedidos || 0));
-  const canjesNormalizados = Math.max(0, Math.min(Number(canjesPremio || 0), Math.floor(delivered / 6)));
-  const comprasDisponibles = Math.max(0, delivered - canjesNormalizados * 6);
+  const canjesRealizados = Math.max(0, Number(canjesHistoricos || 0));
+  
+  // Las compras que "cuentan" para sellos son el total menos las que ya se usaron para premios
+  const comprasConsumidas = canjesRealizados * 6;
+  const comprasDisponibles = Math.max(0, delivered - comprasConsumidas);
 
   return {
-    canjesPremio: canjesNormalizados,
     recompensasPendientes: Math.floor(comprasDisponibles / 6),
     sellos: comprasDisponibles % 6,
   };
@@ -42,7 +44,7 @@ function averageFrequencyDays(pedidos) {
 }
 
 function recalculateClienteStats(db, clienteId) {
-  const existing = db.prepare('SELECT id, canjes_premio FROM clientes WHERE id = ?').get(clienteId);
+  const existing = db.prepare('SELECT id FROM clientes WHERE id = ?').get(clienteId);
   if (!existing) return null;
 
   const pedidosEntregados = db
@@ -54,13 +56,17 @@ function recalculateClienteStats(db, clienteId) {
   const puntos = Math.floor(totalGastado / 100);
   const nivel = levelFromPoints(puntos);
   const frecuenciaDias = averageFrequencyDays(pedidosEntregados);
-  const rewardState = computeRewardState(totalPedidos, existing.canjes_premio || 0);
+  
+  
+
+  // Detectar si acaba de ganar un premio nuevo (múltiplo de 6 real)
+  
 
   db.prepare(
     `
       UPDATE clientes
-      SET total_pedidos = ?, total_gastado = ?, puntos = ?, nivel = ?, sellos = ?,
-          frecuencia_dias = ?, canjes_premio = ?
+      SET total_pedidos = ?, total_gastado = ?, puntos = ?, nivel = ?,
+          frecuencia_dias = ?
       WHERE id = ?
     `
   ).run(
@@ -68,9 +74,7 @@ function recalculateClienteStats(db, clienteId) {
     totalGastado,
     puntos,
     nivel,
-    rewardState.sellos,
     frecuenciaDias,
-    rewardState.canjesPremio,
     clienteId
   );
 
