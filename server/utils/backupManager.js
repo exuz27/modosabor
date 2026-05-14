@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
+const Database = require('better-sqlite3');
 const { backupsDir, dbFile, ensureDir } = require('./storagePaths');
 
 function ensureBackupsDir() {
@@ -92,7 +92,7 @@ function tableColumns(database, table) {
 
 function restoreDatabaseBackup(db, file, options = {}) {
   const backupPath = getBackupPath(file);
-  const backupDb = new DatabaseSync(backupPath);
+  const backupDb = new Database(backupPath);
   const currentTables = listApplicationTables(db);
   const backupTables = new Set(listApplicationTables(backupDb));
   const tablesToRestore = currentTables.filter((table) => backupTables.has(table));

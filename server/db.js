@@ -1,4 +1,4 @@
-const { DatabaseSync } = require('node:sqlite');
+const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const { dbFile, ensureStoragePaths } = require('./utils/storagePaths');
 const {
@@ -10,7 +10,7 @@ const {
 const { backfillPedidoItems } = require('./utils/pedidoItems');
 
 ensureStoragePaths();
-const db = new DatabaseSync(dbFile);
+const db = new Database(dbFile);
 db.exec('PRAGMA journal_mode = WAL');
 db.exec('PRAGMA foreign_keys = ON');
 
