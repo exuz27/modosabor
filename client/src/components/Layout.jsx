@@ -210,6 +210,7 @@ export default function Layout() {
   const getPageTitle = () => {
     const titles = {
       '/admin/dashboard': 'Dashboard',
+      '/admin/operacion': 'Control Diario',
       '/admin/tpv': 'TPV / Punto de Venta',
       '/admin/pedidos': 'Pedidos',
       '/admin/caja': 'Cierre de Caja',

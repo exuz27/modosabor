@@ -31,6 +31,19 @@ function getActiveCaja() {
   return db.prepare("SELECT * FROM cierres_caja WHERE estado = 'abierta' ORDER BY abierta_en DESC LIMIT 1").get();
 }
 
+function parseMoneyInput(value) {
+  if (typeof value === 'number') return value;
+  const raw = String(value || '').trim();
+  if (!raw) return 0;
+  const normalized = raw
+    .replace(/\s/g, '')
+    .replace(/\$/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
 function buildCajaResumen(desde, hasta = null, cierreId = null) {
   const config = getConfigMap();
   let query = `
@@ -167,14 +180,15 @@ router.post('/movimiento', auth, requirePermission('caja.manage'), (req, res) =>
 
   const { tipo, monto, motivo } = req.body;
   if (!['entrada', 'salida'].includes(tipo)) return res.status(400).json({ error: 'Tipo invalido' });
-  if (Number(monto || 0) <= 0) return res.status(400).json({ error: 'Monto debe ser mayor a 0' });
+  const montoNormalizado = parseMoneyInput(monto);
+  if (Number.isNaN(montoNormalizado) || montoNormalizado <= 0) return res.status(400).json({ error: 'Monto debe ser mayor a 0' });
   if (!String(motivo || '').trim()) return res.status(400).json({ error: 'Debes indicar un motivo' });
 
   const actor = actorFromRequest(req);
   const result = db.prepare(`
     INSERT INTO caja_movimientos (cierre_id, tipo, monto, motivo, actor_id, actor_nombre)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(activa.id, tipo, Number(monto), String(motivo || '').trim(), actor.actor_id, actor.actor_nombre);
+  `).run(activa.id, tipo, montoNormalizado, String(motivo || '').trim(), actor.actor_id, actor.actor_nombre);
 
   const movimiento = db.prepare('SELECT * FROM caja_movimientos WHERE id = ?').get(result.lastInsertRowid);
   logAudit(db, {
@@ -184,7 +198,7 @@ router.post('/movimiento', auth, requirePermission('caja.manage'), (req, res) =>
     entidad_id: movimiento.id,
     actor_id: actor.actor_id,
     actor_nombre: actor.actor_nombre,
-    detalle: { tipo, monto, motivo },
+    detalle: { tipo, monto: montoNormalizado, motivo },
   });
 
   res.json(movimiento);
@@ -194,7 +208,7 @@ router.post('/apertura', auth, requirePermission('caja.manage'), (req, res) => {
   if (getActiveCaja()) return res.status(400).json({ error: 'Ya hay una caja abierta' });
 
   const { monto_inicial = 0, notas = '' } = req.body;
-  const montoInicial = Number(monto_inicial || 0);
+  const montoInicial = parseMoneyInput(monto_inicial);
   if (Number.isNaN(montoInicial) || montoInicial < 0) {
     return res.status(400).json({ error: 'El monto inicial debe ser 0 o mayor' });
   }
@@ -223,7 +237,7 @@ router.post('/cierre', auth, requirePermission('caja.manage'), (req, res) => {
   if (!activa) return res.status(400).json({ error: 'No hay una caja abierta' });
 
   const { monto_final_declarado = 0, notas = '' } = req.body;
-  const declarado = Number(monto_final_declarado || 0);
+  const declarado = parseMoneyInput(monto_final_declarado);
   if (Number.isNaN(declarado) || declarado < 0) {
     return res.status(400).json({ error: 'El monto final declarado debe ser 0 o mayor' });
   }

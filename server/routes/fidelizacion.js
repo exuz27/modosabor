@@ -78,7 +78,7 @@ router.get('/config', auth, requirePermission('configuracion.view'), (req, res) 
 });
 
 // PUT /api/fidelizacion/config
-router.put('/config', auth, requirePermission('configuracion.edit'), (req, res) => {
+router.put('/config', auth, requirePermission('config.manage'), (req, res) => {
   try {
     const config = updateConfig(req.body);
     res.json(config);
@@ -115,7 +115,7 @@ router.get('/niveles/cliente/:clienteId', auth, (req, res) => {
 });
 
 // POST /api/fidelizacion/niveles/recalcular
-router.post('/niveles/recalcular', auth, requirePermission('configuracion.edit'), (req, res) => {
+router.post('/niveles/recalcular', auth, requirePermission('config.manage'), (req, res) => {
   try {
     const resultado = recalcularTodosLosNiveles();
     res.json({ 
@@ -266,7 +266,7 @@ router.get('/estadisticas', auth, requirePermission('reportes.view'), (req, res)
 // ============================================
 
 // POST /api/fidelizacion/mantenimiento/expirar
-router.post('/mantenimiento/expirar', auth, requirePermission('configuracion.edit'), (req, res) => {
+router.post('/mantenimiento/expirar', auth, requirePermission('config.manage'), (req, res) => {
   try {
     const expirados = procesarPuntosExpirados();
     res.json({ 

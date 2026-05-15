@@ -12,6 +12,7 @@ const ROLE_PERMISSIONS = {
     'reportes.view',
     'caja.view',
     'caja.manage',
+    'configuracion.view',
   ],
   cocina: [
     'dashboard.view',
@@ -25,6 +26,7 @@ const ROLE_PERMISSIONS = {
     'delivery.view',
     'delivery.manage',
     'pedidos.view',
+    'configuracion.view',
   ],
 };
 

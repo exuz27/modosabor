@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { formatDistanceToNowStrict, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -20,8 +20,10 @@ import {
 } from 'lucide-react';
 import api from '../lib/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useAppConfig } from '../context/AppConfigContext.jsx';
 import { socketManager } from '../lib/socket.js';
 import { normalizePedidoItems } from '../lib/pedidoItems.js';
+import { claimAlertKey, runOrderAlert, useOrderAlertPlayback } from '../lib/orderAlerts.js';
 
 const COLS = [
   { estado: 'confirmado', label: 'Por Preparar', icon: Clock3, bg: 'bg-[#ECF2FF]', text: 'text-[#5D87FF]', border: 'border-[#5D87FF]/20' },
@@ -161,6 +163,7 @@ function PedidoKitchenCard({ pedido, onEstado, updatingId, canAct }) {
 
 export default function KDS() {
   const { hasPermission } = useAuth();
+  const { config } = useAppConfig();
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
@@ -168,7 +171,7 @@ export default function KDS() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
   const [, forceTick] = useState(0);
-  const audioRef = useRef(null);
+  const { audioContextRef, voiceRef, fallbackAudioRef } = useOrderAlertPlayback();
   const canAct = hasPermission('pedidos.kitchen') || hasPermission('pedidos.edit');
 
   const cargar = async () => {
@@ -182,10 +185,6 @@ export default function KDS() {
   };
 
   useEffect(() => {
-    try {
-      audioRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    } catch(e) { console.error('AudioContext fail', e); }
-    
     const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener('fullscreenchange', onFullscreenChange);
 
@@ -196,19 +195,15 @@ export default function KDS() {
     const unsubscribeNuevo = socketManager.on('nuevo_pedido', (pedido) => {
       if (['confirmado', 'preparando', 'listo'].includes(pedido.estado)) {
         setPedidos((prev) => [pedido, ...prev.filter((item) => item.id !== pedido.id)]);
-      toast.success(`Pedido #${pedido.numero} en Cocina`, { icon: '🍳' });
-        if (soundEnabled && audioRef.current) {
-          const now = audioRef.current.currentTime;
-          const osc = audioRef.current.createOscillator();
-          const gain = audioRef.current.createGain();
-          osc.connect(gain);
-          gain.connect(audioRef.current.destination);
-          gain.gain.setValueAtTime(0.0001, now);
-          gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
-          osc.frequency.setValueAtTime(880, now);
-          osc.start(now);
-          osc.stop(now + 0.25);
+        toast.success(`Pedido #${pedido.numero} en Cocina`, { icon: '🍳' });
+        if (soundEnabled && claimAlertKey(`nuevo:${pedido.id}`)) {
+          runOrderAlert({
+            pedido,
+            config,
+            audioContextRef,
+            voiceRef,
+            fallbackAudioRef,
+          }).catch(() => {});
         }
       }
     });
@@ -229,7 +224,7 @@ export default function KDS() {
       socketManager.disconnect();
       document.removeEventListener('fullscreenchange', onFullscreenChange);
     };
-  }, [soundEnabled]);
+  }, [audioContextRef, config, fallbackAudioRef, soundEnabled, voiceRef]);
 
   const cambiarEstado = async (id, estado) => {
     setUpdatingId(id);
@@ -348,4 +343,5 @@ export default function KDS() {
     </div>
   );
 }
+
 

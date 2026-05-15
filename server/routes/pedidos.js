@@ -9,6 +9,7 @@ const { autoAssignPedido } = require('../utils/deliveryAssignment');
 const { recalculateClienteStats } = require('../utils/loyalty');
 const { procesarFidelidadPedido, getConfig: getFidelizacionConfig } = require('../services/fidelizacionService');
 const { restoreInventoryForPedido } = require('../utils/inventory');
+const { createRateLimiter } = require('../utils/rateLimit');
 const {
   emitPedidoActualizado,
   emitDeliveryAssignment,
@@ -50,6 +51,12 @@ const {
   getAvailableTransitions,
   canUserTransitionWithContext,
 } = require('../utils/pedidoStateMachine');
+
+const publicOrderRateLimit = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  message: 'Demasiados pedidos desde este origen. Proba de nuevo en unos minutos.',
+});
 
 function buildTrackingPayload(pedido) {
   const hydrated = hydratePedido(pedido);
@@ -629,7 +636,7 @@ router.post('/:id/pago/mercadopago/sync', auth, requirePermission('pedidos.edit'
   }
 });
 
-router.post('/checkout/mercadopago', async (req, res) => {
+router.post('/checkout/mercadopago', publicOrderRateLimit, async (req, res) => {
   const config = getConfigMap(db);
   if (!config.mercadopago_token) return res.status(400).json({ error: 'MercadoPago no configurado' });
   if (!req.body?.items) return res.status(400).json({ error: 'Items requeridos' });
@@ -721,7 +728,7 @@ router.post('/interno', auth, requirePermission('tpv.use'), async (req, res) => 
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', publicOrderRateLimit, async (req, res) => {
   if (!req.body?.items) return res.status(400).json({ error: 'Items requeridos' });
 
   try {

@@ -248,6 +248,19 @@ export default function Inventario() {
     }
   };
 
+  const syncHamburguesasWithStock = async () => {
+    setSaving(true);
+    try {
+      await api.post('/inventario/productos/sync/hamburguesas-base');
+      toast.success('Hamburguesas sincronizadas con pan y medallones');
+      await cargar();
+    } catch (error) {
+      toast.error(error?.error || 'No se pudieron sincronizar las hamburguesas');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const syncPapasWithStock = async () => {
     setSaving(true);
     try {
@@ -356,7 +369,7 @@ export default function Inventario() {
               <p className="text-sm font-black text-[#5D87FF] uppercase tracking-[0.3em]">Gestión de Suministros</p>
             </div>
             <h1 className="text-3xl font-black text-gray-900 tracking-tight">Inventario y Recetas</h1>
-            <p className="mt-1 text-gray-500 font-medium">Controla el stock compartido de tus pizzas y milanesas.</p>
+            <p className="mt-1 text-gray-500 font-medium">Controla el stock compartido de pizzas, hamburguesas y milanesas.</p>
           </div>
           
           <div className="flex flex-wrap gap-3">
@@ -508,6 +521,15 @@ export default function Inventario() {
                       className="h-11 w-full rounded-2xl bg-gray-900 text-[11px] font-black uppercase tracking-widest text-white shadow-lg shadow-gray-200 transition-all hover:bg-gray-800 disabled:opacity-50"
                     >
                       Sincronizar milanesas
+                    </button>
+                  </div>
+                  <div className="md:w-72 md:self-end">
+                    <button
+                      onClick={syncHamburguesasWithStock}
+                      disabled={saving}
+                      className="h-11 w-full rounded-2xl bg-gray-900 text-[11px] font-black uppercase tracking-widest text-white shadow-lg shadow-gray-200 transition-all hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      Sincronizar hamburguesas
                     </button>
                   </div>
                   <div className="md:w-72 md:self-end">

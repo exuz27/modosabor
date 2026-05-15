@@ -3,7 +3,11 @@ setlocal EnableDelayedExpansion
 chcp 65001 > nul
 title ModoSabor → Oracle Cloud Deploy
 
-set "KEY=D:\Proyectos\modosabor1\deploy\oci.key"
+if "%MODOSABOR_SSH_KEY%"=="" (
+  set "KEY=%USERPROFILE%\Downloads\ssh-key-2026-05-14.key"
+) else (
+  set "KEY=%MODOSABOR_SSH_KEY%"
+)
 set "VM=ubuntu@136.248.108.127"
 set "PROJECT=D:\Proyectos\modosabor1"
 set "ZIP=%PROJECT%\deploy\modosabor-deploy.zip"
@@ -38,7 +42,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  $_.FullName -notmatch '\\\\dist\\\\' -and" ^
   "  $_.FullName -notmatch '\\\\.git\\\\' -and" ^
   "  $_.FullName -notmatch '\\\\template_base\\\\' -and" ^
-  "  $_.Name -ne 'modosabor-deploy.zip'" ^
+  "  $_.Name -ne 'modosabor-deploy.zip' -and" ^
+  "  $_.Extension -ne '.key'" ^
   "} | ForEach-Object {" ^
   "  $rel = $_.FullName.Substring($src.Length + 1);" ^
   "  [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $rel) | Out-Null" ^
@@ -133,7 +138,6 @@ echo.
 echo ================================================
 echo  DEPLOY COMPLETADO!
 echo  Tu app esta en: http://136.248.108.127
-echo  Login: exuz27@gmail.com / ModoSabor2026!
 echo ================================================
 echo.
 pause

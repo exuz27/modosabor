@@ -4,7 +4,7 @@ const db = require('../db');
 
 const PORT = Number(process.env.PORT || 3001);
 const BASE_URL = `http://127.0.0.1:${PORT}/api`;
-const TEST_EMAIL = 'system-check@modosabor.local';
+const TEST_EMAIL = 'system-check-operacion@modosabor.local';
 const TEST_PASSWORD = 'SystemCheck123!';
 const TEST_PHONE = '5493810000000';
 

@@ -21,6 +21,7 @@ import WebPublica from './pages/WebPublica.jsx';
 // Lazy imports
 const Login = lazy(() => import('./pages/Login.jsx'));
 const Dashboard = lazy(() => import('./pages/DashboardModern.jsx'));
+const Operacion = lazy(() => import('./pages/Operacion.jsx'));
 const TPV = lazy(() => import('./pages/TPV.jsx'));
 const Pedidos = lazy(() => import('./pages/Pedidos.jsx'));
 const Productos = lazy(() => import('./pages/Productos.jsx'));
@@ -58,6 +59,7 @@ export default function App() {
                 <Route element={<Layout />}>
                   <Route element={<PrivateRoute permission="dashboard.view" />}>
                     <Route path="/admin/dashboard" element={<Dashboard />} />
+                    <Route path="/admin/operacion" element={<Operacion />} />
                   </Route>
                   <Route element={<PrivateRoute permission="tpv.use" moduleKey="tpv" />}>
                     <Route path="/admin/tpv" element={<TPV />} />

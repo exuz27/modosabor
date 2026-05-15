@@ -30,6 +30,19 @@ const MOVEMENT_REASONS = {
   salida: ['Compra urgente', 'Pago repartidor', 'Gasto operativo', 'Retiro de efectivo'],
 };
 
+function parseMoneyInput(value) {
+  if (typeof value === 'number') return value;
+  const raw = String(value || '').trim();
+  if (!raw) return 0;
+  const normalized = raw
+    .replace(/\s/g, '')
+    .replace(/\$/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
 function fmtDateTime(value) {
   if (!value) return '-';
   const parsed = new Date(String(value).replace(' ', 'T'));
@@ -128,11 +141,11 @@ export default function Caja() {
   const ultimoCierre = historial.find((item) => item.estado === 'cerrada') || null;
   const diferencia = useMemo(() => {
     if (!data?.activa) return 0;
-    return Number(closing.monto_final_declarado || 0) - efectivoEsperado;
+    return parseMoneyInput(closing.monto_final_declarado) - efectivoEsperado;
   }, [closing.monto_final_declarado, data?.activa, efectivoEsperado]);
 
   const abrirCaja = async () => {
-    const monto = Number(opening.monto_inicial || 0);
+    const monto = parseMoneyInput(opening.monto_inicial);
     if (Number.isNaN(monto) || monto < 0) {
       toast.error('El fondo inicial debe ser 0 o mayor');
       return;
@@ -150,7 +163,7 @@ export default function Caja() {
   };
 
   const cerrarCaja = async () => {
-    const monto = Number(closing.monto_final_declarado || 0);
+    const monto = parseMoneyInput(closing.monto_final_declarado);
     if (Number.isNaN(monto) || monto < 0) {
       toast.error('El contado debe ser 0 o mayor');
       return;
@@ -177,7 +190,7 @@ export default function Caja() {
 
   const registrarMovimiento = async (e) => {
     e.preventDefault();
-    const monto = Number(movimiento.monto || 0);
+    const monto = parseMoneyInput(movimiento.monto);
     if (Number.isNaN(monto) || monto <= 0) {
       toast.error('El movimiento debe ser mayor a 0');
       return;
@@ -343,7 +356,8 @@ export default function Caja() {
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest opacity-80 ml-1">Efectivo Contado en Caja</label>
                       <input 
-                        type="number" 
+                        type="text"
+                        inputMode="decimal"
                         value={closing.monto_final_declarado} 
                         onChange={e => setClosing(p => ({ ...p, monto_final_declarado: e.target.value }))}
                         className="h-14 w-full rounded-2xl bg-white/10 border-none px-4 text-xl font-black text-white focus:bg-white/20 outline-none transition-all placeholder:text-white/30 mt-1"
@@ -458,7 +472,8 @@ export default function Caja() {
                 <div>
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Fondo de Apertura ($)</label>
                   <input 
-                    type="number" 
+                    type="text"
+                    inputMode="decimal"
                     value={opening.monto_inicial} 
                     onChange={e => setOpening(p => ({ ...p, monto_inicial: e.target.value }))}
                     className={CONTROL + " mt-1 h-14 text-lg font-black"} 
@@ -672,7 +687,8 @@ export default function Caja() {
               <div>
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Monto ($)</label>
                 <input 
-                  type="number" 
+                  type="text"
+                  inputMode="decimal"
                   required
                   value={movimiento.monto} 
                   onChange={e => setMovimiento(p => ({ ...p, monto: e.target.value }))}

@@ -213,6 +213,27 @@ function normalizeKey(value) {
     .trim();
 }
 
+function parseJson(value, fallback) {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (Array.isArray(value) || (typeof value === 'object' && value !== null)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed === null || parsed === undefined ? fallback : parsed;
+  } catch {
+    return fallback;
+  }
+}
+
+function getVariantOptionNames(product, groupName) {
+  const groups = parseJson(product?.variantes, []);
+  if (!Array.isArray(groups)) return [];
+  const group = groups.find((entry) => normalizeKey(entry?.nombre) === normalizeKey(groupName));
+  if (!group || !Array.isArray(group.opciones)) return [];
+  return group.opciones
+    .map((option) => cleanText(option?.nombre || option?.value || option))
+    .filter(Boolean);
+}
+
 function getCategoryByName(name) {
   return db.prepare(`
     SELECT id, nombre
@@ -236,6 +257,17 @@ function ensureInsumo({ nombre, rubro, unidad, nota_compra }) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(nombre, rubro || 'General', unidad || 'u', 0, 0, 0, nota_compra || '', 1);
     insumo = db.prepare('SELECT * FROM inventario_insumos WHERE id = ?').get(insert.lastInsertRowid);
+  } else {
+    db.prepare(`
+      UPDATE inventario_insumos
+      SET rubro = ?,
+          unidad = ?,
+          nota_compra = ?,
+          activo = 1,
+          actualizado_en = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(rubro || insumo.rubro || 'General', unidad || insumo.unidad || 'u', nota_compra || insumo.nota_compra || '', insumo.id);
+    insumo = db.prepare('SELECT * FROM inventario_insumos WHERE id = ?').get(insumo.id);
   }
 
   return insumo;
@@ -335,13 +367,67 @@ router.post('/productos/sync/pizzas-prepizza', (_req, res) => {
     unidad: 'u',
     nota_compra: 'Base compartida para pizzas',
   });
+  const quesoCremoso = ensureInsumo({
+    nombre: 'Queso cremoso 200g',
+    rubro: 'Fiambreria',
+    unidad: 'u',
+    nota_compra: 'Porcion compartida de queso cremoso para pizzas',
+  });
+  const muzzarella = ensureInsumo({
+    nombre: 'Muzzarella 200g',
+    rubro: 'Fiambreria',
+    unidad: 'u',
+    nota_compra: 'Porcion compartida de muzzarella para pizzas',
+  });
 
   const result = syncProductsWithRecipes({
     categoryName: 'Pizzas',
-    buildRows: () => ([
-      { insumo_id: prepizza.id, cantidad: 1, condicion_tipo: CONDITION_TYPES.VARIANT, condicion_grupo: 'Presentacion', condicion_valor: 'Entera', orden: 0 },
-      { insumo_id: prepizza.id, cantidad: 0.5, condicion_tipo: CONDITION_TYPES.VARIANT, condicion_grupo: 'Presentacion', condicion_valor: 'Mitad', orden: 1 },
-    ]),
+    buildRows: (product) => {
+      const options = getVariantOptionNames(product, 'Presentacion');
+      if (!options.length) {
+        return [
+          { insumo_id: prepizza.id, cantidad: 1, condicion_tipo: CONDITION_TYPES.ALWAYS, condicion_grupo: '', condicion_valor: '', orden: 0 },
+          { insumo_id: quesoCremoso.id, cantidad: 1, condicion_tipo: CONDITION_TYPES.ALWAYS, condicion_grupo: '', condicion_valor: '', orden: 1 },
+        ];
+      }
+
+      return options
+        .flatMap((option, index) => {
+          const key = normalizeKey(option);
+          const esMedia = key.includes('media') || key.includes('mitad');
+          const cantidad = esMedia ? 0.5 : 1;
+          const rows = [{
+            insumo_id: prepizza.id,
+            cantidad,
+            condicion_tipo: CONDITION_TYPES.VARIANT,
+            condicion_grupo: 'Presentacion',
+            condicion_valor: option,
+            orden: index * 2,
+          }];
+
+          if (key.includes('cremoso')) {
+            rows.push({
+              insumo_id: quesoCremoso.id,
+              cantidad,
+              condicion_tipo: CONDITION_TYPES.VARIANT,
+              condicion_grupo: 'Presentacion',
+              condicion_valor: option,
+              orden: (index * 2) + 1,
+            });
+          } else if (key.includes('muzza') || key.includes('musa') || key.includes('mozzarella')) {
+            rows.push({
+              insumo_id: muzzarella.id,
+              cantidad,
+              condicion_tipo: CONDITION_TYPES.VARIANT,
+              condicion_grupo: 'Presentacion',
+              condicion_valor: option,
+              orden: (index * 2) + 1,
+            });
+          }
+
+          return rows;
+        });
+    },
   });
 
   if (result.error) {
@@ -420,23 +506,76 @@ router.post('/productos/sync/milanesas-base', (_req, res) => {
   }
 
   const carne = ensureInsumo({
-    nombre: 'Carne para milanesa',
+    nombre: 'Milanesa de carne',
     rubro: 'Carniceria',
-    unidad: 'kg',
-    nota_compra: 'Base compartida para milanesas de ternera',
+    unidad: 'u',
+    nota_compra: 'Base compartida para milanesas de carne',
   });
   const pollo = ensureInsumo({
-    nombre: 'Pollo para milanesa',
+    nombre: 'Milanesa de pollo',
     rubro: 'Carniceria',
-    unidad: 'kg',
+    unidad: 'u',
     nota_compra: 'Base compartida para milanesas de pollo',
   });
 
   const result = syncProductsWithRecipes({
     categoryName: 'Milanesas',
-    buildRows: () => ([
-      { insumo_id: pollo.id, cantidad: 1, condicion_tipo: CONDITION_TYPES.VARIANT, condicion_grupo: 'Tipo', condicion_valor: 'Pollo', orden: 0 },
-      { insumo_id: carne.id, cantidad: 1, condicion_tipo: CONDITION_TYPES.VARIANT, condicion_grupo: 'Tipo', condicion_valor: 'Ternera', orden: 1 },
+    buildRows: (product) => {
+      const options = getVariantOptionNames(product, 'Tipo');
+      if (!options.length) {
+        return [{ insumo_id: carne.id, cantidad: 1, condicion_tipo: CONDITION_TYPES.ALWAYS, condicion_grupo: '', condicion_valor: '', orden: 0 }];
+      }
+
+      return options.map((option, index) => ({
+        insumo_id: normalizeKey(option).includes('pollo') ? pollo.id : carne.id,
+        cantidad: 1,
+        condicion_tipo: CONDITION_TYPES.VARIANT,
+        condicion_grupo: 'Tipo',
+        condicion_valor: option,
+        orden: index,
+      }));
+    },
+  });
+
+  if (result.error) {
+    return res.status(500).json({ error: result.error });
+  }
+
+  res.json(result);
+});
+
+function inferSmashCount(product) {
+  const text = normalizeKey(`${product?.nombre || ''} ${product?.descripcion || ''}`);
+  if (text.includes('cuadruple')) return 4;
+  if (text.includes('triple')) return 3;
+  if (text.includes('doble')) return 2;
+  return 1;
+}
+
+router.post('/productos/sync/hamburguesas-base', (_req, res) => {
+  const hamburguesasCategory = getCategoryByName('Hamburguesas');
+  if (!hamburguesasCategory) {
+    return res.status(400).json({ error: 'No existe la categoria Hamburguesas' });
+  }
+
+  const pan = ensureInsumo({
+    nombre: 'Pan hamburguesa',
+    rubro: 'Panaderia',
+    unidad: 'u',
+    nota_compra: 'Pan compartido para todas las hamburguesas',
+  });
+  const medallon = ensureInsumo({
+    nombre: 'Medallon smash 90g',
+    rubro: 'Carniceria',
+    unidad: 'u',
+    nota_compra: 'Medallon compartido para hamburguesas smash',
+  });
+
+  const result = syncProductsWithRecipes({
+    categoryName: 'Hamburguesas',
+    buildRows: (product) => ([
+      { insumo_id: pan.id, cantidad: 1, condicion_tipo: CONDITION_TYPES.ALWAYS, condicion_grupo: '', condicion_valor: '', orden: 0 },
+      { insumo_id: medallon.id, cantidad: inferSmashCount(product), condicion_tipo: CONDITION_TYPES.ALWAYS, condicion_grupo: '', condicion_valor: '', orden: 1 },
     ]),
   });
 

@@ -109,6 +109,7 @@ app.use('/api/cupones', require('./routes/cupones'));
 app.use('/api/marketing', require('./routes/marketing'));
 app.use('/api/compras', require('./routes/compras'));
 app.use('/api/fidelizacion', require('./routes/fidelizacion'));
+app.use('/api/operacion', require('./routes/operacion'));
 
 if (process.env.NODE_ENV === 'production' && fs.existsSync(clientIndexFile)) {
   app.use(express.static(clientDistDir));

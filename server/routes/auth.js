@@ -6,10 +6,16 @@ const db = require('../db');
 const auth = require('../middleware/auth');
 const { getPermissionsForRole, requirePermission } = require('../utils/permissions');
 const { getJwtSecret } = require('../utils/authConfig');
+const { createRateLimiter } = require('../utils/rateLimit');
 
 const JWT_SECRET = getJwtSecret();
+const loginRateLimit = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Demasiados intentos de login. Proba de nuevo en 15 minutos.',
+});
 
-router.post('/login', (req, res) => {
+router.post('/login', loginRateLimit, (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email y contrasena requeridos' });
   const user = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activo = 1').get(email);

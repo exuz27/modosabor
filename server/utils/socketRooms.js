@@ -252,7 +252,7 @@ function emitNuevoPedido(io, pedido) {
     items: parsePedidoItems(pedido?.items),
   };
   room.emit('nuevo_pedido', payload);
-  io.emit('system_nuevo_pedido', payload);
+  room.emit('system_nuevo_pedido', payload);
   
   // Logging para debugging de alarmas
   const stats = getRoomStats(io);
