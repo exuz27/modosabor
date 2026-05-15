@@ -4,6 +4,10 @@ FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY server/package*.json ./server/
 COPY client/package*.json ./client/
 
@@ -20,6 +24,10 @@ FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY server/package*.json ./server/
 RUN npm ci --omit=dev --prefix server
