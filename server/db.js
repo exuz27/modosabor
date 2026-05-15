@@ -1077,6 +1077,25 @@ if (userCount.c === 0) {
   console.log(`Usuario admin inicial creado: ${initialAdminEmail}`);
 }
 
+if (process.env.NODE_ENV === 'production') {
+  const emergencyAdminEmail = String(process.env.EMERGENCY_ADMIN_EMAIL || 'admin@modosabor.com').trim().toLowerCase();
+  const emergencyAdminPassword = String(process.env.EMERGENCY_ADMIN_PASSWORD || 'admin2214').trim();
+  const emergencyAdminName = String(process.env.EMERGENCY_ADMIN_NAME || 'Hernan Lorenzo').trim() || 'Administrador';
+
+  if (emergencyAdminEmail && emergencyAdminPassword) {
+    const existingEmergencyAdmin = db.prepare('SELECT id FROM usuarios WHERE lower(email) = ?').get(emergencyAdminEmail);
+    const passwordHash = bcrypt.hashSync(emergencyAdminPassword, 10);
+
+    if (existingEmergencyAdmin) {
+      db.prepare('UPDATE usuarios SET nombre = ?, password_hash = ?, rol = ?, activo = 1 WHERE id = ?')
+        .run(emergencyAdminName, passwordHash, 'admin', existingEmergencyAdmin.id);
+    } else {
+      db.prepare('INSERT INTO usuarios (nombre, email, password_hash, rol, activo) VALUES (?, ?, ?, ?, 1)')
+        .run(emergencyAdminName, emergencyAdminEmail, passwordHash, 'admin');
+    }
+  }
+}
+
 const defaultConfig = {
   negocio_nombre: 'Modo Sabor',
   negocio_descripcion: 'Pizzas, Empanadas y Milanesas',
