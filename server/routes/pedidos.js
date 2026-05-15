@@ -735,6 +735,7 @@ router.post('/interno', auth, requirePermission('tpv.use'), async (req, res) => 
     if (io) emitNuevoPedido(io, hydrated);
     res.json(hydrated);
   } catch (error) {
+    console.error('[pedidos] Error al crear pedido interno:', error);
     res.status(400).json({ error: normalizePedidoCreationError(error) });
   }
 });
@@ -774,6 +775,7 @@ router.post('/', publicOrderRateLimit, async (req, res) => {
     }
     res.json(hydrated);
   } catch (error) {
+    console.error('[pedidos] Error al crear pedido publico:', error);
     res.status(400).json({ error: publicPedidoError(error) });
   }
 });
