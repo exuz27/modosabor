@@ -1,5 +1,7 @@
 FROM node:20-bookworm-slim AS builder
 
+# Railway deploy config lives in railway.json; keep this file watched.
+
 WORKDIR /app
 
 COPY server/package*.json ./server/
