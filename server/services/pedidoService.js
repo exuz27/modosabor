@@ -432,14 +432,10 @@ function createPedidoWithInventory(payload) {
       if (safePayload.repartidor_id) {
         pedido = assignPedidoToRepartidor(db, pedido.id, safePayload.repartidor_id, { markEnCamino: false }).pedido;
       } else {
-        const config = getConfigMap(db);
-        if (config.delivery_autoasignar_activo === '1') {
-          const assigned = autoAssignPedido(db, pedido.id, {
-            onlyIfSingleAvailable: true,
-            markEnCamino: false,
-          });
-          if (assigned.ok) pedido = assigned.pedido;
-        }
+        const assigned = autoAssignPedido(db, pedido.id, {
+          markEnCamino: false,
+        });
+        if (assigned.ok) pedido = assigned.pedido;
       }
     }
     
