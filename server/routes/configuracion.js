@@ -525,7 +525,7 @@ router.post('/uploads/bootstrap-import', (req, res) => {
     return res.status(401).json({ error: 'No autorizado' });
   }
 
-  const copied = bootstrapUploadsFromBundle();
+  const bootstrap = bootstrapUploadsFromBundle();
   const uploaded = fs.readdirSync(uploadsDir).map((file) => ({
     file,
     url: uploadPathFromFilename(file),
@@ -533,7 +533,8 @@ router.post('/uploads/bootstrap-import', (req, res) => {
 
   return res.json({
     ok: true,
-    copied,
+    copied: bootstrap.copied,
+    filesCopied: bootstrap.filesCopied,
     total: uploaded.length,
     uploaded,
   });

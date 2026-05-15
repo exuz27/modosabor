@@ -29,21 +29,43 @@ function ensureStoragePaths() {
   ensureDir(backupsDir);
 }
 
-function isDirectoryEmpty(target) {
-  try {
-    return fs.readdirSync(target).length === 0;
-  } catch {
-    return true;
+function copyMissingEntries(sourceDir, targetDir) {
+  ensureDir(targetDir);
+  let copied = 0;
+
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      copied += copyMissingEntries(sourcePath, targetPath);
+      continue;
+    }
+
+    if (fs.existsSync(targetPath)) {
+      continue;
+    }
+
+    fs.copyFileSync(sourcePath, targetPath);
+    copied += 1;
   }
+
+  return copied;
 }
 
 function bootstrapUploadsFromBundle() {
-  if (path.resolve(defaultUploadsDir) === path.resolve(uploadsDir)) return false;
-  if (!fs.existsSync(defaultUploadsDir)) return false;
-  if (!isDirectoryEmpty(uploadsDir)) return false;
+  if (path.resolve(defaultUploadsDir) === path.resolve(uploadsDir)) {
+    return { copied: false, filesCopied: 0 };
+  }
+  if (!fs.existsSync(defaultUploadsDir)) {
+    return { copied: false, filesCopied: 0 };
+  }
 
-  fs.cpSync(defaultUploadsDir, uploadsDir, { recursive: true });
-  return true;
+  const filesCopied = copyMissingEntries(defaultUploadsDir, uploadsDir);
+  return {
+    copied: filesCopied > 0,
+    filesCopied,
+  };
 }
 
 function uploadPathFromFilename(filename = '') {

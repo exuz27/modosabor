@@ -6,7 +6,8 @@ client/node_modules
 server/node_modules
 client/dist
 server/data
-server/uploads
+!server/uploads
+!server/uploads/**
 server/server.log
 server/server-out.log
 server/server-err.log
