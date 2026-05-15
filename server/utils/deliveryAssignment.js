@@ -1,4 +1,4 @@
-function listAvailableRepartidores(db) {
+function listActiveRepartidores(db) {
   return db.prepare(`
     SELECT
       r.*,
@@ -17,8 +17,9 @@ function listAvailableRepartidores(db) {
       WHERE tipo_entrega = 'delivery' AND repartidor_id IS NOT NULL
       GROUP BY repartidor_id
     ) history ON history.repartidor_id = r.id
-    WHERE r.activo = 1 AND r.disponible = 1
+    WHERE r.activo = 1
     ORDER BY
+      CASE WHEN r.disponible = 1 THEN 0 ELSE 1 END ASC,
       COALESCE(active.active_orders, 0) ASC,
       CASE WHEN history.last_assigned_at IS NULL THEN 0 ELSE 1 END ASC,
       datetime(history.last_assigned_at) ASC,
@@ -41,7 +42,7 @@ function getRepartidorById(db, repartidorId) {
 
 function pickBestAvailableRepartidor(db, pedido = null) {
   const targetZone = normalizeZone(pedido?.delivery_zona);
-  const disponibles = listAvailableRepartidores(db)
+  const disponibles = listActiveRepartidores(db)
     .map((repartidor) => {
       const preferredZone = normalizeZone(repartidor.zona_preferida);
       const lastPingAt = repartidor.ultima_ubicacion_en ? new Date(repartidor.ultima_ubicacion_en).getTime() : 0;
@@ -49,6 +50,7 @@ function pickBestAvailableRepartidor(db, pedido = null) {
         ...repartidor,
         _score: [
           targetZone && preferredZone && targetZone === preferredZone ? 0 : 1,
+          Number(repartidor.disponible) === 1 ? 0 : 1,
           Number(repartidor.active_orders || 0),
           lastPingAt ? -lastPingAt : Number.MAX_SAFE_INTEGER,
         ],
@@ -71,9 +73,6 @@ function assignPedidoToRepartidor(db, pedidoId, repartidorId, options = {}) {
 
   const repartidor = getRepartidorById(db, repartidorId);
   if (!repartidor || !repartidor.activo) throw new Error('Repartidor no encontrado');
-  if (!repartidor.disponible && Number(pedido.repartidor_id || 0) !== Number(repartidor.id)) {
-    throw new Error('Ese repartidor no esta disponible');
-  }
 
   const previousRepartidorId = Number(pedido.repartidor_id || 0);
   const previousRepartidor = previousRepartidorId && previousRepartidorId !== Number(repartidor.id)
@@ -103,18 +102,18 @@ function assignPedidoToRepartidor(db, pedidoId, repartidorId, options = {}) {
 
 function autoAssignPedido(db, pedidoId, options = {}) {
   const pedido = getPedidoById(db, pedidoId);
-  const disponibles = listAvailableRepartidores(db);
-  if (options.onlyIfSingleAvailable && disponibles.length !== 1) {
+  const activos = listActiveRepartidores(db);
+  if (options.onlyIfSingleAvailable && activos.length !== 1) {
     return {
       ok: false,
-      reason: disponibles.length === 0 ? 'no_available_repartidor' : 'multiple_available_repartidores',
+      reason: activos.length === 0 ? 'no_available_repartidor' : 'multiple_available_repartidores',
       repartidor: null,
       pedido,
     };
   }
 
   const repartidor = options.onlyIfSingleAvailable
-    ? (disponibles[0] || null)
+    ? (activos[0] || null)
     : pickBestAvailableRepartidor(db, pedido);
   if (!repartidor) {
     return {
@@ -134,7 +133,7 @@ function autoAssignPedido(db, pedidoId, options = {}) {
 }
 
 module.exports = {
-  listAvailableRepartidores,
+  listActiveRepartidores,
   pickBestAvailableRepartidor,
   getPedidoById,
   getRepartidorById,

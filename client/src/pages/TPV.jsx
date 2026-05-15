@@ -259,7 +259,7 @@ export default function TPV() {
     })
   ), [productos, catActiva, busqueda]);
   const repartidoresDisponibles = useMemo(
-    () => repartidores.filter((item) => item.activo && (item.disponible || String(item.id) === String(selectedRiderId))),
+    () => repartidores.filter((item) => item.activo),
     [repartidores, selectedRiderId]
   );
   const cartQtyByProductId = useMemo(() => items.reduce((acc, item) => {
