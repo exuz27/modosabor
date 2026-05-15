@@ -132,6 +132,37 @@ function optionalNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const OPTIONAL_FOREIGN_KEY_LOOKUPS = {
+  repartidores: db.prepare('SELECT id FROM repartidores WHERE id = ?'),
+  cupones: db.prepare('SELECT id FROM cupones WHERE id = ?'),
+  marketing_campanas: db.prepare('SELECT id FROM marketing_campanas WHERE id = ?'),
+  marketing_promos: db.prepare('SELECT id FROM marketing_promos WHERE id = ?'),
+};
+
+function resolveOptionalForeignKey(table, value) {
+  const id = optionalNumber(value);
+  if (!id) return null;
+  const statement = OPTIONAL_FOREIGN_KEY_LOOKUPS[table];
+  if (!statement) return null;
+  return statement.get(id)?.id || null;
+}
+
+function sanitizePedidoReferences(payload = {}) {
+  const repartidorId = resolveOptionalForeignKey('repartidores', payload.repartidor_id);
+  const cuponId = resolveOptionalForeignKey('cupones', payload.cupon_id);
+  const marketingCampanaId = resolveOptionalForeignKey('marketing_campanas', payload.marketing_campana_id);
+  const marketingPromoId = resolveOptionalForeignKey('marketing_promos', payload.marketing_promo_id);
+
+  return {
+    ...payload,
+    repartidor_id: repartidorId,
+    cupon_id: cuponId,
+    cupon_codigo: cuponId ? payload.cupon_codigo : null,
+    marketing_campana_id: marketingCampanaId,
+    marketing_promo_id: marketingPromoId,
+  };
+}
+
 function generateEntregaPin() {
   return String(Math.floor(1000 + (Math.random() * 9000)));
 }
@@ -209,6 +240,7 @@ function canTransitionPedido(user, pedido, nextEstado) {
 }
 
 function createPedidoRecord(payload) {
+  const safePayload = sanitizePedidoReferences(payload);
   const {
     cliente_nombre = '',
     cliente_telefono = '',
@@ -246,7 +278,7 @@ function createPedidoRecord(payload) {
     marketing_medium = '',
     marketing_campaign = '',
     marketing_content = '',
-  } = payload;
+  } = safePayload;
   const metodoPago = normalizeMetodoPago(metodo_pago);
   const pagoEstado = resolveInitialPagoEstado({
     metodoPago,
@@ -389,14 +421,15 @@ function createPedidoWithInventory(payload) {
 
   try {
     db.exec('BEGIN');
-    let pedido = createPedidoRecord(payload);
+    const safePayload = sanitizePedidoReferences(payload);
+    let pedido = createPedidoRecord(safePayload);
     
     // Aplicar descuento de stock (basado en recetas o stock directo)
     applyInventoryToPedido(db, pedido);
 
     if (pedido.tipo_entrega === 'delivery') {
-      if (payload.repartidor_id) {
-        pedido = assignPedidoToRepartidor(db, pedido.id, payload.repartidor_id, { markEnCamino: false }).pedido;
+      if (safePayload.repartidor_id) {
+        pedido = assignPedidoToRepartidor(db, pedido.id, safePayload.repartidor_id, { markEnCamino: false }).pedido;
       } else {
         const config = getConfigMap(db);
         if (config.delivery_autoasignar_activo === '1') {

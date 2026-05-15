@@ -138,6 +138,14 @@ function buildCheckoutPayload(pedido, extra = {}) {
   };
 }
 
+function normalizePedidoCreationError(error) {
+  const message = String(error?.message || '').trim();
+  if (/foreign key constraint failed/i.test(message)) {
+    return 'Hay un dato vinculado que ya no existe en el sistema. Actualiza la pantalla y vuelve a intentar la venta.';
+  }
+  return message || 'No se pudo crear el pedido';
+}
+
 router.post('/webhook/mercadopago', async (req, res) => {
   const config = getConfigMap(db);
   if (!config.mercadopago_token) {
@@ -727,7 +735,7 @@ router.post('/interno', auth, requirePermission('tpv.use'), async (req, res) => 
     if (io) emitNuevoPedido(io, hydrated);
     res.json(hydrated);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: normalizePedidoCreationError(error) });
   }
 });
 
