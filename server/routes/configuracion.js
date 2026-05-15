@@ -12,7 +12,7 @@ const { quoteDelivery, serializeZones } = require('../utils/deliveryZones');
 const { buildPrintTestDocument } = require('../utils/printTemplates');
 const { getCurrentShiftInfo } = require('../utils/shifts');
 const { mergeRuntimeConfig } = require('../utils/runtimeConfig');
-const { uploadsDir, uploadPathFromFilename } = require('../utils/storagePaths');
+const { uploadsDir, uploadPathFromFilename, bootstrapUploadsFromBundle } = require('../utils/storagePaths');
 const {
   createFileFilter,
   IMAGE_EXTENSIONS,
@@ -512,6 +512,30 @@ router.post('/backup/bootstrap-import', backupUpload.single('backup'), (req, res
     restored,
     safety_backup: safetyBackup,
     backups: listBackups(),
+  });
+});
+
+router.post('/uploads/bootstrap-import', (req, res) => {
+  if (!bootstrapImportKey) {
+    return res.status(404).json({ error: 'Bootstrap import deshabilitado' });
+  }
+
+  const providedKey = String(req.headers['x-bootstrap-key'] || '').trim();
+  if (!providedKey || providedKey !== bootstrapImportKey) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+
+  const copied = bootstrapUploadsFromBundle();
+  const uploaded = fs.readdirSync(uploadsDir).map((file) => ({
+    file,
+    url: uploadPathFromFilename(file),
+  }));
+
+  return res.json({
+    ok: true,
+    copied,
+    total: uploaded.length,
+    uploaded,
   });
 });
 
