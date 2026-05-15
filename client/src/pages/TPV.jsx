@@ -69,6 +69,8 @@ export default function TPV() {
   const [searchParams] = useSearchParams();
   const searchInputRef = useRef(null);
   const cartItemsRef = useRef(null);
+  const customerLocationRequestRef = useRef(0);
+  const customerLocationBusyRef = useRef(false);
 
   const [config, setConfig] = useState({});
   const [categorias, setCategorias] = useState([]);
@@ -547,22 +549,37 @@ export default function TPV() {
       return;
     }
 
+    if (customerLocationBusyRef.current) {
+      return;
+    }
+
+    customerLocationBusyRef.current = true;
+    const requestId = customerLocationRequestRef.current + 1;
+    customerLocationRequestRef.current = requestId;
     setSharingLocation(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (customerLocationRequestRef.current !== requestId) return;
         setCliente((previous) => ({
           ...previous,
           latitud: position.coords.latitude,
           longitud: position.coords.longitude,
         }));
+        customerLocationBusyRef.current = false;
         setSharingLocation(false);
-        toast.success('Ubicacion guardada');
+        toast.success('Ubicacion guardada', { id: 'tpv-customer-location' });
       },
-      () => {
+      (error) => {
+        if (customerLocationRequestRef.current !== requestId) return;
+        customerLocationBusyRef.current = false;
         setSharingLocation(false);
-        toast.error('No se pudo obtener la ubicacion');
+        const denied = error?.code === 1;
+        toast.error(
+          denied ? 'El navegador bloqueo la ubicacion' : 'No se pudo obtener la ubicacion',
+          { id: 'tpv-customer-location' }
+        );
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
