@@ -171,8 +171,8 @@ export default function SeccionModulos({ config, setToggle, setConfig }) {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-8">
-      <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 -mx-6 px-6 py-4 mb-8 flex items-center justify-between">
+    <div className="mx-auto max-w-7xl p-4 md:p-6 space-y-8">
+      <div className="sticky top-[84px] z-10 mb-8 flex items-center justify-between rounded-[28px] border border-gray-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <div className="h-12 w-12 rounded-2xl bg-sky-100 flex items-center justify-center">
             <LayoutGrid className="text-sky-600" size={24} />

@@ -398,6 +398,9 @@ export default function Personal() {
                           <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"><Briefcase size={14} className="text-[#5D87FF]" /> {detail.item.rol_operativo}</span>
                           <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"><Clock size={14} className="text-[#FFAE1F]" /> {detail.item.turno_preferido}</span>
                           <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"><Star size={14} className="text-amber-400" /> {detail.item.puntos_reconocimiento} pts</span>
+                          {detail.item.rol_operativo === 'delivery' ? (
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 uppercase tracking-wider"><Bike size={14} className="text-emerald-500" /> Rider sincronizado</span>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -702,6 +705,11 @@ export default function Personal() {
                   <select value={form.rol_operativo} onChange={e => setForm({...form, rol_operativo: e.target.value})} className={CONTROL}>
                     {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                   </select>
+                  {form.rol_operativo === 'delivery' ? (
+                    <p className="mt-2 text-[11px] font-bold uppercase tracking-widest text-emerald-600">
+                      Se crea o actualiza también en Delivery automáticamente
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label className="text-xs font-bold text-gray-700 mb-1 block">Categoría Laboral</label>

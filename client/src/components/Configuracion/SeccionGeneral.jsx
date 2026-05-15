@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Clock, Palette, Plus, Store, Trash2 } from 'lucide-react';
+import { Building2, Clock, ImagePlus, Palette, Plus, Store, Trash2 } from 'lucide-react';
 import { SectionCard, InputField } from './ConfigComponents.jsx';
 
 export default function SeccionGeneral({
@@ -9,10 +9,15 @@ export default function SeccionGeneral({
   addTurno,
   updateTurno,
   removeTurno,
+  logoInputRef,
+  faviconInputRef,
+  assetUploading,
+  onLogoFileChange,
+  onFaviconFileChange,
 }) {
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-8">
-      <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 -mx-6 px-6 py-4 mb-8 flex items-center justify-between">
+    <div className="mx-auto max-w-7xl p-4 md:p-6 space-y-8">
+      <div className="sticky top-[84px] z-10 mb-8 flex items-center justify-between rounded-[28px] border border-gray-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <div className="h-12 w-12 rounded-2xl bg-indigo-100 flex items-center justify-center">
             <Building2 className="text-indigo-600" size={24} />
@@ -41,11 +46,78 @@ export default function SeccionGeneral({
       </SectionCard>
 
       <SectionCard icon={Palette} tone="indigo" title="Identidad visual" subtitle="Logo y color principal del sistema">
+        <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={onLogoFileChange} />
+        <input ref={faviconInputRef} type="file" accept=".ico,image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onFaviconFileChange} />
+
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <InputField label="Logo" {...f('negocio_logo')} placeholder="/uploads/logo.png o https://..." />
           <InputField label="Favicon" {...f('negocio_favicon')} placeholder="/uploads/favicon.ico o https://..." />
           <InputField label="Color principal" {...f('color_primario')} placeholder="#f97316" />
           <InputField label="Mensaje de confirmacion" {...f('mensaje_confirmacion')} placeholder="Gracias por tu pedido" />
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-gray-900">Logo del negocio</p>
+                <p className="mt-1 text-xs text-gray-500">Puedes seguir usando un enlace o subir el archivo directamente desde aquí.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => logoInputRef?.current?.click()}
+                disabled={assetUploading?.logo}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+              >
+                <ImagePlus size={16} />
+                {assetUploading?.logo ? 'Subiendo...' : 'Subir logo'}
+              </button>
+            </div>
+            <div className="mt-4 flex items-center gap-4 rounded-2xl border border-dashed border-gray-300 bg-white p-4">
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-gray-100">
+                {config.negocio_logo ? (
+                  <img src={config.negocio_logo} alt="Logo actual" className="h-full w-full object-contain" />
+                ) : (
+                  <Palette className="text-gray-400" size={24} />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-700">Vista actual</p>
+                <p className="truncate text-xs text-gray-500">{config.negocio_logo || 'Todavía no hay logo cargado'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-gray-900">Favicon del sitio</p>
+                <p className="mt-1 text-xs text-gray-500">Ideal para la pestaña del navegador y accesos directos del sitio.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => faviconInputRef?.current?.click()}
+                disabled={assetUploading?.favicon}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+              >
+                <ImagePlus size={16} />
+                {assetUploading?.favicon ? 'Subiendo...' : 'Subir favicon'}
+              </button>
+            </div>
+            <div className="mt-4 flex items-center gap-4 rounded-2xl border border-dashed border-gray-300 bg-white p-4">
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-gray-100">
+                {config.negocio_favicon ? (
+                  <img src={config.negocio_favicon} alt="Favicon actual" className="h-10 w-10 object-contain" />
+                ) : (
+                  <Palette className="text-gray-400" size={24} />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-700">Vista actual</p>
+                <p className="truncate text-xs text-gray-500">{config.negocio_favicon || 'Todavía no hay favicon cargado'}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </SectionCard>
 

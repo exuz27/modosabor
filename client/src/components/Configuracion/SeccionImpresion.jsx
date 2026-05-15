@@ -316,8 +316,8 @@ export default function SeccionImpresion({ config, f, setToggle, setConfig }) {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-8">
-      <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 -mx-6 px-6 py-4 mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="mx-auto max-w-7xl p-4 md:p-6 space-y-8">
+      <div className="sticky top-[84px] z-10 mb-8 flex flex-col gap-4 rounded-[28px] border border-gray-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur-sm md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-4">
           <div className="h-12 w-12 rounded-2xl bg-violet-100 flex items-center justify-center">
             <Printer className="text-violet-600" size={24} />

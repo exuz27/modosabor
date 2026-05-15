@@ -12,6 +12,7 @@ const { mergeRuntimeConfig, isPrivateNetworkUrl, isPublicHttpsUrl } = require('.
 const { uploadsDir, ensureStoragePaths, bootstrapUploadsFromBundle } = require('./utils/storagePaths');
 const { initSocketSecurity } = require('./utils/socketRooms');
 const { isUploadValidationError, formatUploadValidationError } = require('./utils/uploadValidation');
+const { syncAllDeliveryPersonnel } = require('./utils/deliveryPersonnelSync');
 
 const app = express();
 const server = http.createServer(app);
@@ -78,6 +79,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 ensureStoragePaths();
 bootstrapUploadsFromBundle();
+syncAllDeliveryPersonnel(db);
 app.use('/uploads', express.static(uploadsDir));
 
 const clientDistDir = path.join(__dirname, '..', 'client', 'dist');

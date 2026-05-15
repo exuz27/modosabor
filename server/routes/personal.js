@@ -7,6 +7,7 @@ const { getCurrentShiftInfo, matchesPreferredShift } = require('../utils/shifts'
 const { actorFromRequest, logAudit } = require('../utils/audit');
 const { insertInventoryMovement, roundStock } = require('../utils/inventory');
 const { parseLocalizedNumber, roundLocalizedNumber } = require('../utils/numberInput');
+const { syncDeliveryRepartidor } = require('../utils/deliveryPersonnelSync');
 
 // Importar el nuevo servicio de personal
 const personalService = require('../services/personalService');
@@ -521,6 +522,7 @@ router.post('/', auth, requirePermission('config.manage'), (req, res) => {
   );
 
   const detail = loadPersonalDetail(result.lastInsertRowid);
+  syncDeliveryRepartidor(db, detail.item);
   res.json(detail.item);
 });
 
@@ -584,10 +586,16 @@ router.put('/:id', auth, requirePermission('config.manage'), (req, res) => {
   );
 
   const detail = loadPersonalDetail(req.params.id);
+  syncDeliveryRepartidor(db, detail.item);
   res.json(detail.item);
 });
 
 router.delete('/:id', auth, requirePermission('config.manage'), (req, res) => {
+  const existing = db.prepare('SELECT * FROM personal WHERE id = ?').get(req.params.id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Personal no encontrado' });
+  }
+  syncDeliveryRepartidor(db, { ...existing, rol_operativo: 'inactivo', activo: 0 });
   db.prepare('DELETE FROM personal WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });

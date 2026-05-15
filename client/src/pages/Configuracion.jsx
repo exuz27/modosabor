@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '../lib/api.js';
 import toast from 'react-hot-toast';
 import {
@@ -48,10 +48,13 @@ export default function Configuracion() {
   const [config, setConfig] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [assetUploading, setAssetUploading] = useState({ logo: false, favicon: false });
   const [activeTab, setActiveTab] = useState('general');
   const [auditLogs, setAuditLogs] = useState([]);
   const [deliveryZones, setDeliveryZones] = useState([]);
   const [turnos, setTurnos] = useState([]);
+  const logoInputRef = useRef(null);
+  const faviconInputRef = useRef(null);
 
   const hydrateState = (data) => {
     setConfig(data);
@@ -103,6 +106,34 @@ export default function Configuracion() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const uploadBrandAsset = async (field, file) => {
+    if (!file) return;
+    setAssetUploading((prev) => ({ ...prev, [field]: true }));
+    const formData = new FormData();
+    formData.append(field, file);
+
+    try {
+      const updated = await api.put('/configuracion', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      hydrateState(updated);
+      applyBranding(updated);
+      await refreshConfig(updated);
+      await fetchAuditLogs();
+      toast.success(field === 'logo' ? 'Logo actualizado' : 'Favicon actualizado');
+    } catch (error) {
+      toast.error(error?.error || 'No se pudo subir el archivo');
+    } finally {
+      setAssetUploading((prev) => ({ ...prev, [field]: false }));
+    }
+  };
+
+  const handleBrandFileChange = (field) => async (event) => {
+    const file = event.target.files?.[0];
+    await uploadBrandAsset(field, file);
+    event.target.value = '';
   };
 
   const setToggle = (key, value) => {
@@ -227,30 +258,32 @@ export default function Configuracion() {
   return (
     <div className="min-h-screen bg-gray-50/50 pb-20">
       <div className="bg-white border-b border-gray-200 sticky top-0 z-20 px-4 md:px-8">
-        <div className="max-w-5xl mx-auto flex items-center justify-between overflow-x-auto no-scrollbar">
-          <div className="flex gap-1 py-2">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
-                    isActive ? `${tab.bg} ${tab.color} ring-1 ring-inset ring-current/20` : 'text-gray-500 hover:bg-gray-100'
-                  }`}
-                >
-                  <Icon size={18} />
-                  {tab.label}
-                </button>
-              );
-            })}
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 py-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="overflow-x-auto no-scrollbar">
+            <div className="flex gap-1">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
+                      isActive ? `${tab.bg} ${tab.color} ring-1 ring-inset ring-current/20` : 'text-gray-500 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <button
             onClick={saveConfig}
             disabled={saving}
-            className="ml-4 flex items-center gap-2 rounded-xl bg-orange-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-orange-200 transition-all hover:bg-orange-700 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+            className="flex items-center justify-center gap-2 self-start rounded-xl bg-orange-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-orange-200 transition-all hover:bg-orange-700 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 xl:self-auto"
           >
             <Save size={18} />
             {saving ? 'Guardando...' : 'Guardar cambios'}
@@ -268,6 +301,11 @@ export default function Configuracion() {
             addTurno={addTurno}
             updateTurno={updateTurno}
             removeTurno={removeTurno}
+            logoInputRef={logoInputRef}
+            faviconInputRef={faviconInputRef}
+            assetUploading={assetUploading}
+            onLogoFileChange={handleBrandFileChange('logo')}
+            onFaviconFileChange={handleBrandFileChange('favicon')}
           />
         )}
         {activeTab === 'modulos' && (

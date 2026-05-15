@@ -52,6 +52,11 @@ const iconoTipo = {
   retiro: <Store size={14} />, 
   mesa: <Armchair size={14} /> 
 };
+const PRINT_LABELS = {
+  comanda_cocina: 'Comanda cocina',
+  ticket_cliente: 'Ticket cliente',
+  delivery_ticket: 'Hoja delivery',
+};
 
 function PedidoCard({
   pedido,
@@ -315,6 +320,14 @@ export default function Pedidos() {
     }).catch(() => setLoading(false));
   };
 
+  const imprimirDocumentosPedidoWeb = async (pedido) => {
+    await imprimir(pedido.id, 'comanda_cocina', { auto: true, silent: true });
+    await imprimir(pedido.id, 'ticket_cliente', { auto: true, silent: true });
+    if (pedido.tipo_entrega === 'delivery') {
+      await imprimir(pedido.id, 'delivery_ticket', { auto: true, silent: true });
+    }
+  };
+
   const imprimirEnIframe = (html) => {
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
@@ -368,7 +381,7 @@ export default function Pedidos() {
       }
       toast.success(`Nuevo pedido #${p.numero}`);
       if (remoteOrder && configRef.current.impresion_auto_web === '1' && canPrint) {
-        imprimir(p.id, 'comanda_cocina', { auto: true, silent: true });
+        imprimirDocumentosPedidoWeb(p).catch(() => {});
       }
     });
     const handlePedidoActualizado = async (p) => {
@@ -506,7 +519,7 @@ export default function Pedidos() {
         popup.document.close();
       }
       if (!silent) {
-        toast.success(tipo === 'comanda_cocina' ? 'Comanda lista' : 'Ticket listo');
+        toast.success(`${PRINT_LABELS[tipo] || 'Documento'} listo`);
       }
     } catch {
       if (popup) popup.close();
@@ -675,10 +688,10 @@ export default function Pedidos() {
                       </div>
                       <div className="flex-1">
                         <p className="text-sm font-black text-gray-800 uppercase tracking-tight">
-                          {row.tipo === 'comanda_cocina' ? 'Comanda Cocina' : 'Ticket Cliente'}
+                          {PRINT_LABELS[row.tipo] || 'Documento'}
                         </p>
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                            {format(parseISO(row.creado_en), 'dd MMM · HH:mm')}
+                          {format(parseISO(row.creado_en), 'dd MMM · HH:mm')}
                         </p>
                       </div>
                       <div className="text-right">

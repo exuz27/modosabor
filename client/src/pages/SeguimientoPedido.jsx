@@ -93,6 +93,14 @@ function riderMapUrl(repartidor) {
   return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat},${lng}`;
 }
 
+function riderRouteUrl(pedido) {
+  if (!pedido?.repartidor?.latitud || !pedido?.repartidor?.longitud) return '';
+  const destination = pedido?.cliente_latitud && pedido?.cliente_longitud
+    ? `${pedido.cliente_latitud},${pedido.cliente_longitud}`
+    : encodeURIComponent(pedido?.cliente_direccion || '');
+  return `https://www.google.com/maps/dir/${pedido.repartidor.latitud},${pedido.repartidor.longitud}/${destination}`;
+}
+
 export default function SeguimientoPedido() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -295,6 +303,49 @@ export default function SeguimientoPedido() {
                     </div>
                   </div>
                 </div>
+
+                {pedido.repartidor?.latitud && pedido.repartidor?.longitud ? (
+                  <div className="mb-6 overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-5 py-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-600">Tracking live</p>
+                        <h3 className="mt-1 text-lg font-bold text-gray-900">Tu delivery en vivo</h3>
+                      </div>
+                      <div className="rounded-full bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-blue-700">
+                        {pedido.ubicacion_repartidor_atrasada ? 'Señal atrasada' : 'En movimiento'}
+                      </div>
+                    </div>
+                    <iframe
+                      title="Seguimiento en vivo"
+                      src={riderMapUrl(pedido.repartidor)}
+                      className="h-72 w-full border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    />
+                    <div className="flex flex-wrap gap-3 px-5 py-4">
+                      <a
+                        href={`https://www.google.com/maps?q=${pedido.repartidor.latitud},${pedido.repartidor.longitud}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800"
+                      >
+                        <MapPin size={15} />
+                        Ver rider
+                      </a>
+                      {riderRouteUrl(pedido) ? (
+                        <a
+                          href={riderRouteUrl(pedido)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-gray-50"
+                        >
+                          <ExternalLink size={15} />
+                          Ver ruta
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="space-y-4">
                   {ESTADOS.map((estado, index) => {

@@ -820,6 +820,8 @@ ensureColumn('repartidores', 'longitud_casa', 'REAL');
 ensureColumn('repartidores', 'avatar_url', "TEXT DEFAULT ''");
 ensureColumn('repartidores', 'notas', "TEXT DEFAULT ''");
 ensureColumn('repartidores', 'fecha_ingreso', "TEXT DEFAULT ''");
+ensureColumn('repartidores', 'personal_id', 'INTEGER');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_repartidores_personal_id ON repartidores(personal_id)');
 
 // Campos adicionales para módulo de personal mejorado
 ensureColumn('personal', 'fecha_nacimiento', "TEXT DEFAULT ''");

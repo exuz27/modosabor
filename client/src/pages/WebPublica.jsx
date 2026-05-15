@@ -31,7 +31,8 @@ import {
   ArrowRight,
   Info,
   ChevronDown,
-  ShoppingBag
+  ShoppingBag,
+  LocateFixed
 } from 'lucide-react';
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('es-AR')}`;
@@ -170,6 +171,7 @@ export default function WebPublica() {
   }));
   const [cupon, setCupon] = useState({ codigo: '', aplicado: null });
   const [popupVisible, setPopupVisible] = useState(false);
+  const [customerGeo, setCustomerGeo] = useState({ latitud: null, longitud: null, loading: false, ready: false });
 
   useEffect(() => {
     Promise.all([
@@ -385,6 +387,8 @@ export default function WebPublica() {
           nombre: form.nombre,
           telefono: form.telefono,
           direccion: form.direccion,
+          latitud: customerGeo.latitud,
+          longitud: customerGeo.longitud,
         },
         items: carrito,
         summary,
@@ -402,6 +406,30 @@ export default function WebPublica() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const captureCustomerLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Tu celular no permite compartir ubicación');
+      return;
+    }
+    setCustomerGeo((prev) => ({ ...prev, loading: true }));
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCustomerGeo({
+          latitud: position.coords.latitude,
+          longitud: position.coords.longitude,
+          loading: false,
+          ready: true,
+        });
+        toast.success('Ubicación tomada');
+      },
+      () => {
+        setCustomerGeo({ latitud: null, longitud: null, loading: false, ready: false });
+        toast.error('No pudimos obtener tu ubicación');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
   };
 
   if (confirmado) {
@@ -667,6 +695,30 @@ export default function WebPublica() {
                     <div className="space-y-4">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Dirección</label>
                       <input value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} className="h-12 w-full rounded-2xl bg-gray-50 border-none px-4 text-sm font-bold focus:ring-2 focus:ring-[#5D87FF]/20 outline-none" placeholder="Calle 123" />
+                      <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#5D87FF]">Ubicación exacta</p>
+                            <p className="mt-1 text-xs font-semibold leading-5 text-gray-500">
+                              Sirve para que el delivery navegue mejor y el seguimiento sea más preciso.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={captureCustomerLocation}
+                            disabled={customerGeo.loading}
+                            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-white px-4 text-[11px] font-black uppercase tracking-widest text-[#5D87FF] shadow-sm disabled:opacity-60"
+                          >
+                            <LocateFixed size={16} />
+                            {customerGeo.loading ? 'Ubicando...' : customerGeo.ready ? 'Actualizar GPS' : 'Usar mi ubicación'}
+                          </button>
+                        </div>
+                        {customerGeo.ready ? (
+                          <p className="mt-3 text-[11px] font-black uppercase tracking-widest text-emerald-600">
+                            Ubicación cargada para el tracking
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                   )}
                   <button onClick={hacerPedido} disabled={loading} className="w-full h-16 rounded-2xl bg-[#5D87FF] text-white font-black uppercase tracking-[0.2em] shadow-xl mt-6 active:scale-95 transition-all">{loading ? 'Procesando...' : 'Confirmar mi Pedido'}</button>

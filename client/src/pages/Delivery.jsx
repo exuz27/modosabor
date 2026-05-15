@@ -615,6 +615,14 @@ export default function Delivery() {
                 <div className="flex gap-2 pb-2">
                   <button onClick={() => window.open(`https://wa.me/${detailModal.telefono}`, '_blank')} className="h-14 w-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-emerald-500 shadow-sm hover:bg-emerald-50 active:scale-90 transition-all"><Phone size={24} fill="currentColor" /></button>
                   <button onClick={() => window.open(`${window.location.origin}/rider/${detailModal.id}/${detailModal.codigo_acceso}`, '_blank')} className="h-14 px-8 rounded-2xl bg-gray-900 text-white text-xs font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">ABRIR APP</button>
+                  <button onClick={() => {
+                    const riderUrl = `${window.location.origin}/rider/${detailModal.id}/${detailModal.codigo_acceso}`;
+                    if (!navigator.clipboard?.writeText) {
+                      toast.error('No se pudo copiar automáticamente');
+                      return;
+                    }
+                    navigator.clipboard.writeText(riderUrl).then(() => toast.success('Link copiado')).catch(() => toast.error('No se pudo copiar'));
+                  }} className="h-14 px-6 rounded-2xl bg-white border border-gray-100 text-xs font-black uppercase tracking-widest text-[#5D87FF] shadow-sm hover:bg-blue-50 active:scale-95 transition-all">COPIAR LINK</button>
                 </div>
               </div>
 
@@ -634,6 +642,9 @@ export default function Delivery() {
                     <div><p className="text-[9px] font-black text-blue-300 uppercase mb-1">ID RIDER</p><p className="text-xl font-black text-blue-700">#{detailModal.id}</p></div>
                     <div className="text-right"><p className="text-[9px] font-black text-blue-300 uppercase mb-1">CÓDIGO PIN</p><p className="text-xl font-mono font-black text-blue-700 uppercase tracking-widest">{detailModal.codigo_acceso}</p></div>
                   </div>
+                  <p className="mt-4 text-xs font-semibold leading-5 text-blue-900">
+                    En el celular abre el link de la app y luego instálala desde el navegador para usar ubicación en vivo.
+                  </p>
                 </div>
                 
                 <div className="rounded-[32px] bg-white p-2 border border-gray-100 shadow-inner h-44 overflow-hidden relative group cursor-pointer" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(detailModal.direccion)}`, '_blank')}>
