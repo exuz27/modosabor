@@ -552,6 +552,18 @@ router.post('/uploads/import', auth, requirePermission('config.manage'), uploadR
   });
 });
 
+router.post('/web-publica/upload', auth, requirePermission('config.manage'), upload.single('asset'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Debes adjuntar una imagen' });
+  }
+
+  return res.json({
+    ok: true,
+    url: uploadPathFromFilename(req.file.filename),
+    file: req.file.filename,
+  });
+});
+
 router.post('/reset', auth, requirePermission('config.manage'), (req, res) => {
   if (String(req.body?.confirmacion || '').trim().toUpperCase() !== 'RESET') {
     return res.status(400).json({ error: 'Debes escribir RESET para confirmar' });

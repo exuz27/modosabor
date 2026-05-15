@@ -35,6 +35,38 @@ import {
 } from 'lucide-react';
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('es-AR')}`;
+const DEFAULT_HERO = 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1400&q=85';
+
+function parseConfigArray(value) {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function isEnabled(value) {
+  return String(value || '0') === '1' || value === true;
+}
+
+function isActiveByDate(item) {
+  if (!item?.activa && item?.activa !== undefined) return false;
+  const now = Date.now();
+  const desde = item?.desde ? new Date(item.desde).getTime() : null;
+  const hasta = item?.hasta ? new Date(item.hasta).getTime() : null;
+  if (desde && Number.isFinite(desde) && now < desde) return false;
+  if (hasta && Number.isFinite(hasta) && now > hasta) return false;
+  return true;
+}
+
+function buildWhatsAppUrl(config, message = '') {
+  const phone = String(config?.negocio_telefono || '3815988735').replace(/\D/g, '');
+  const finalPhone = phone.startsWith('54') ? phone : `54${phone}`;
+  const text = encodeURIComponent(message || 'Hola Modo Sabor, quiero hacer un pedido.');
+  return `https://wa.me/${finalPhone}?text=${text}`;
+}
 
 function buildTrackingLink(pedido) {
   if (!pedido?.id) return '/';
@@ -49,21 +81,27 @@ function ProductoCard({ producto, onAgregar, colorPrimario }) {
   const isPizza = normalizeText(producto?.categoria_nombre || '').includes('pizza');
 
   return (
-    <div className={`group relative flex flex-col rounded-[32px] bg-white p-4 shadow-sm transition-all duration-300 hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] hover:-translate-y-1 border border-gray-100 ${producto.disponible_para_venta === false ? 'opacity-60 grayscale' : ''}`}>
-      <div className="relative mb-4 aspect-[4/3] overflow-hidden rounded-[24px] bg-[#F2F6FA]">
+    <div id={`producto-${producto.id}`} className={`group relative flex flex-col overflow-hidden rounded-[28px] bg-white shadow-sm transition-all duration-300 hover:shadow-[0_20px_50px_rgba(0,0,0,0.12)] hover:-translate-y-1 border border-gray-100 ${producto.disponible_para_venta === false ? 'opacity-60 grayscale' : ''}`}>
+      <div className="relative aspect-[4/3] overflow-hidden bg-[#111]">
         {producto.imagen ? (
           <img src={producto.imagen} alt={producto.nombre} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-4xl opacity-20">MS</div>
+          <div className="flex h-full w-full items-center justify-center text-4xl font-black text-white/20">MS</div>
         )}
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/65 to-transparent" />
         {producto.destacado === 1 && (
-          <div className="absolute top-3 left-3 rounded-xl bg-white/90 backdrop-blur-sm px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-[#5D87FF] shadow-sm">
-            Popular
+          <div className="absolute top-3 left-3 rounded-xl bg-red-600 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-white shadow-sm">
+            Recomendado
+          </div>
+        )}
+        {producto.disponible_para_venta === false && (
+          <div className="absolute bottom-3 left-3 rounded-xl bg-white/95 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-gray-900">
+            Sin stock
           </div>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col px-2">
+      <div className="flex flex-1 flex-col p-4">
         <h3 className="text-base font-black leading-tight text-gray-900 uppercase tracking-tight line-clamp-2 mb-1">{producto.nombre}</h3>
         
         {producto.descripcion && (
@@ -72,14 +110,14 @@ function ProductoCard({ producto, onAgregar, colorPrimario }) {
           </p>
         )}
 
-        <div className="mt-auto flex items-center justify-between border-t border-gray-50 pt-4">
+        <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-4">
           <div className="flex flex-col gap-1.5">
             {!isPizza && structuredPrices.items.length >= 2 ? (
               <div className="flex flex-wrap gap-x-4 gap-y-1">
                 {structuredPrices.items.map((item) => (
                   <div key={item.label} className="flex flex-col">
                     <span className="text-[10px] font-black text-gray-300 uppercase leading-none mb-1">{item.label}</span>
-                    <span className="text-xl font-black text-gray-900 leading-none">{fmt(item.price)}</span>
+                    <span className="text-xl font-black text-red-600 leading-none">{fmt(item.price)}</span>
                   </div>
                 ))}
               </div>
@@ -88,7 +126,7 @@ function ProductoCard({ producto, onAgregar, colorPrimario }) {
                 {primaryPrice.label ? (
                   <span className="text-[10px] font-black text-gray-300 uppercase leading-none mb-1">{primaryPrice.label}</span>
                 ) : null}
-                <span className="text-xl font-black text-gray-900 leading-none">{fmt(primaryPrice.price)}</span>
+                <span className="text-xl font-black text-red-600 leading-none">{fmt(primaryPrice.price)}</span>
               </>
             )}
           </div>
@@ -97,7 +135,7 @@ function ProductoCard({ producto, onAgregar, colorPrimario }) {
             onClick={() => onAgregar(producto)}
             disabled={producto.disponible_para_venta === false}
             className="flex h-11 w-11 items-center justify-center rounded-2xl transition-all active:scale-90 shadow-md"
-            style={{ backgroundColor: colorPrimario || '#5D87FF', color: 'white' }}
+            style={{ backgroundColor: colorPrimario || '#dc2626', color: 'white' }}
           >
             <Plus size={20} strokeWidth={3} />
           </button>
@@ -131,6 +169,7 @@ export default function WebPublica() {
     overrides: { available: true, message: '' },
   }));
   const [cupon, setCupon] = useState({ codigo: '', aplicado: null });
+  const [popupVisible, setPopupVisible] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -206,7 +245,43 @@ export default function WebPublica() {
     descuentoFijo: cupon.aplicado?.monto_descuento || 0,
   }), [carrito, form.tipo_entrega, deliveryQuote, cupon.aplicado?.monto_descuento]);
   const { totalItems, subtotal, envio, total } = summary;
-  const colorPrimario = config?.negocio_color_primario || '#5D87FF';
+  const colorPrimario = config?.negocio_color_primario || config?.color_primario || '#dc2626';
+  const activePromos = useMemo(
+    () => parseConfigArray(config.web_promos_json).filter(isActiveByDate),
+    [config.web_promos_json]
+  );
+  const destacados = useMemo(
+    () => productos.filter((producto) => Number(producto.destacado) === 1 && producto.disponible_para_venta !== false).slice(0, 8),
+    [productos]
+  );
+  const popupContent = useMemo(() => {
+    const configPopup = isEnabled(config.web_popup_activo) && isActiveByDate({
+      activa: true,
+      desde: config.web_popup_desde,
+      hasta: config.web_popup_hasta,
+    }) && (config.web_popup_titulo || config.web_popup_imagen)
+      ? {
+        id: 'config-popup',
+        titulo: config.web_popup_titulo,
+        descripcion: config.web_popup_descripcion,
+        imagen: config.web_popup_imagen,
+        boton_texto: config.web_popup_boton_texto || 'Ver promo',
+        accion_tipo: config.web_popup_accion_tipo || 'none',
+        accion_valor: config.web_popup_accion_valor || '',
+      }
+      : null;
+    return configPopup || activePromos.find((promo) => promo.mostrar_popup);
+  }, [activePromos, config]);
+
+  useEffect(() => {
+    if (!popupContent?.id) return;
+    const frequencyHours = Math.max(1, Number(config.web_popup_frecuencia_horas || 12));
+    const storageKey = `ms_public_popup_${popupContent.id}`;
+    const lastShown = Number(localStorage.getItem(storageKey) || 0);
+    if (Date.now() - lastShown < frequencyHours * 60 * 60 * 1000) return;
+    setPopupVisible(true);
+    localStorage.setItem(storageKey, String(Date.now()));
+  }, [popupContent?.id, config.web_popup_frecuencia_horas]);
 
   const speakAdded = () => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -254,6 +329,46 @@ export default function WebPublica() {
     setVariantModal(null);
     speakAdded();
     toast.success('Producto agregado');
+  };
+
+  const handleAction = (tipo = 'none', valor = '', fallback = {}) => {
+    const actionType = tipo || 'none';
+    const actionValue = valor || '';
+
+    if (actionType === 'cart') {
+      setCarritoOpen(true);
+      return;
+    }
+
+    if (actionType === 'whatsapp') {
+      window.open(buildWhatsAppUrl(config, actionValue), '_blank');
+      return;
+    }
+
+    if (actionType === 'url' && actionValue) {
+      window.open(actionValue, '_blank');
+      return;
+    }
+
+    if (actionType === 'producto' && actionValue) {
+      const product = productos.find((item) => String(item.id) === String(actionValue));
+      if (product) {
+        setCatActiva(product.categoria_id || null);
+        setTimeout(() => {
+          document.getElementById(`producto-${product.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 80);
+      }
+      return;
+    }
+
+    if (actionType === 'categoria') {
+      const categoryId = actionValue || fallback.categoria_id || categorias[0]?.id || null;
+      setCatActiva(categoryId ? Number(categoryId) : null);
+      setTimeout(() => document.getElementById('menu-publico')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+      return;
+    }
+
+    document.getElementById('menu-publico')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const variantesCompletas = !variantModal || variantModal.variantes.every((group) => {
@@ -311,47 +426,113 @@ export default function WebPublica() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F7FB] font-sans selection:bg-[#5D87FF]/20">
-      <header className="sticky top-0 z-[100] bg-white/80 backdrop-blur-md border-b border-gray-100/50 px-6 py-4">
+    <div className="min-h-screen bg-[#f6f2ea] font-sans selection:bg-red-600/20">
+      <header className="sticky top-0 z-[100] border-b border-white/10 bg-[#090909]/90 px-4 py-3 text-white backdrop-blur-md md:px-6">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             {config?.negocio_logo ? (
-              <img src={config.negocio_logo} className="h-12 w-12 object-contain rounded-2xl bg-white p-1.5 shadow-sm border border-gray-100" alt="logo" />
+              <img src={config.negocio_logo} className="h-12 w-12 object-contain rounded-2xl bg-white p-1.5 shadow-sm" alt="logo" />
             ) : (
-              <div className="h-12 w-12 rounded-2xl bg-[#5D87FF] text-white flex items-center justify-center font-black text-xl shadow-lg">MS</div>
+              <div className="h-12 w-12 rounded-2xl bg-red-600 text-white flex items-center justify-center font-black text-xl shadow-lg">MS</div>
             )}
             <div>
-              <h1 className="text-lg font-black text-gray-900 uppercase tracking-tight">{config?.negocio_nombre || 'Modo Sabor'}</h1>
-              <div className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                Abierto Ahora
+              <h1 className="text-lg font-black uppercase tracking-tight">{config?.negocio_nombre || 'Modo Sabor'}</h1>
+              <div className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 ${config?.abierto_ahora ? 'text-emerald-400' : 'text-amber-300'}`}>
+                <div className={`h-1.5 w-1.5 rounded-full ${config?.abierto_ahora ? 'bg-emerald-400 animate-pulse' : 'bg-amber-300'}`}></div>
+                {config?.abierto_ahora ? `Abierto${config?.turno_actual?.hasta ? ` hasta ${config.turno_actual.hasta}` : ''}` : 'Cerrado ahora'}
               </div>
             </div>
           </div>
-          <button onClick={() => setCarritoOpen(true)} className="relative h-12 px-6 rounded-2xl bg-gray-900 text-white flex items-center gap-3 shadow-xl active:scale-95 transition-all">
+          <button onClick={() => setCarritoOpen(true)} className="relative h-12 px-4 md:px-6 rounded-2xl bg-red-600 text-white flex items-center gap-3 shadow-xl active:scale-95 transition-all">
             <ShoppingCart size={20} />
             <span className="text-sm font-black uppercase tracking-widest">{fmt(total)}</span>
-            {totalItems > 0 && <div className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-[#5D87FF] text-white text-[10px] font-black flex items-center justify-center border-2 border-white">{totalItems}</div>}
+            {totalItems > 0 && <div className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-white text-red-600 text-[10px] font-black flex items-center justify-center border-2 border-[#090909]">{totalItems}</div>}
           </button>
         </div>
       </header>
 
-      <section className="relative h-[280px] bg-gray-900 flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 opacity-40">
-          <img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1200&q=80" className="w-full h-full object-cover" alt="hero" />
+      <section className="relative overflow-hidden bg-[#090909] text-white">
+        <div className="absolute inset-0 opacity-55">
+          <img src={config.web_hero_imagen || DEFAULT_HERO} className="w-full h-full object-cover" alt="Modo Sabor" />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-[#F4F7FB] via-transparent to-transparent"></div>
-        <div className="relative z-10 text-center px-6">
-          <h2 className="text-4xl md:text-5xl font-black text-white uppercase tracking-tighter shadow-sm">¿Qué vas a pedir hoy?</h2>
-          <p className="text-white/80 font-black text-xs uppercase tracking-[0.3em] mt-4">Los mejores sabores de Monteros a tu puerta</p>
+        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/70 to-black/10"></div>
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#f6f2ea] to-transparent"></div>
+        <div className="relative z-10 mx-auto grid min-h-[420px] max-w-6xl grid-cols-1 items-end gap-8 px-6 pb-16 pt-20 md:grid-cols-[1.1fr,0.9fr] md:items-center md:pb-24">
+          <div>
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.26em] text-red-200 backdrop-blur">
+              <Star size={14} fill="currentColor" />
+              Vive el sabor
+            </div>
+            <h2 className="max-w-3xl text-5xl font-black uppercase leading-[0.9] tracking-tight md:text-7xl">
+              {config.web_hero_titulo || config.negocio_nombre || 'Modo Sabor'}
+            </h2>
+            <p className="mt-5 max-w-xl text-base font-semibold leading-7 text-white/78 md:text-lg">
+              {config.web_hero_subtitulo || config.negocio_descripcion || 'Pedí directo desde nuestra carta online.'}
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => handleAction(config.web_hero_accion_tipo || 'categoria', config.web_hero_accion_valor)}
+                className="inline-flex h-14 items-center gap-3 rounded-2xl bg-red-600 px-6 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-red-950/40 transition hover:bg-red-700 active:scale-95"
+              >
+                {config.web_hero_boton_texto || 'Pedir ahora'}
+                <ArrowRight size={18} />
+              </button>
+              <button
+                onClick={() => window.open(buildWhatsAppUrl(config), '_blank')}
+                className="inline-flex h-14 items-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-6 text-xs font-black uppercase tracking-widest text-white backdrop-blur transition hover:bg-white/15"
+              >
+                <Phone size={18} />
+                WhatsApp
+              </button>
+            </div>
+          </div>
+          <div className="hidden md:block">
+            <div className="ml-auto max-w-sm rounded-[32px] border border-white/15 bg-white/10 p-5 backdrop-blur">
+              <p className="text-[10px] font-black uppercase tracking-[0.26em] text-red-200">Pedido rapido</p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {categorias.slice(0, 4).map((cat) => (
+                  <button key={cat.id} onClick={() => handleAction('categoria', cat.id)} className="rounded-2xl bg-black/35 px-4 py-4 text-left transition hover:bg-red-600">
+                    <span className="text-2xl">{cat.icono}</span>
+                    <span className="mt-2 block text-xs font-black uppercase tracking-widest">{cat.nombre}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <div className="sticky top-[81px] z-[90] bg-[#F4F7FB]/95 backdrop-blur-sm px-6 py-6 -mt-10">
+      {activePromos.filter((promo) => promo.mostrar_banner !== false).length > 0 && (
+        <section className="relative z-20 -mt-10 px-6">
+          <div className="mx-auto max-w-6xl overflow-x-auto no-scrollbar">
+            <div className="flex gap-4 pb-2">
+              {activePromos.filter((promo) => promo.mostrar_banner !== false).slice(0, 6).map((promo) => (
+                <button
+                  key={promo.id}
+                  onClick={() => handleAction(promo.accion_tipo, promo.accion_valor)}
+                  className="group grid min-w-[280px] max-w-[360px] flex-1 grid-cols-[86px,1fr] overflow-hidden rounded-3xl bg-white text-left shadow-xl shadow-black/10 ring-1 ring-black/5 transition hover:-translate-y-0.5"
+                >
+                  <div className="bg-[#141414]">
+                    {promo.imagen ? <img src={promo.imagen} alt={promo.titulo} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xl font-black text-white/25">MS</div>}
+                  </div>
+                  <div className="p-4">
+                    <p className="text-[9px] font-black uppercase tracking-[0.24em] text-red-600">{promo.etiqueta || 'Promo'}</p>
+                    <h3 className="mt-1 line-clamp-1 text-sm font-black uppercase text-gray-900">{promo.titulo}</h3>
+                    {promo.precio_texto ? <p className="mt-1 text-lg font-black text-gray-950">{promo.precio_texto}</p> : null}
+                    <p className="mt-2 line-clamp-2 text-xs font-medium leading-5 text-gray-500">{promo.descripcion}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <div id="menu-publico" className="sticky top-[73px] z-[90] bg-[#f6f2ea]/95 backdrop-blur-sm px-6 py-5">
         <div className="max-w-6xl mx-auto flex gap-3 overflow-x-auto no-scrollbar pb-2">
-          <button onClick={() => setCatActiva(null)} className={`shrink-0 h-12 px-8 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${!catActiva ? 'bg-[#5D87FF] text-white shadow-xl shadow-blue-100' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100 shadow-sm'}`}>Todo el menú</button>
+          <button onClick={() => setCatActiva(null)} className={`shrink-0 h-12 px-8 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${!catActiva ? 'bg-[#111] text-white shadow-xl shadow-black/10' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100 shadow-sm'}`}>Todo el menú</button>
           {Array.isArray(categorias) && categorias.map((c) => (
-            <button key={c.id} onClick={() => setCatActiva(c.id)} className={`shrink-0 h-12 px-8 rounded-2xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-3 ${catActiva === c.id ? 'bg-[#5D87FF] text-white shadow-xl shadow-blue-100' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100 shadow-sm'}`}>
+            <button key={c.id} onClick={() => setCatActiva(c.id)} className={`shrink-0 h-12 px-8 rounded-2xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-3 ${catActiva === c.id ? 'bg-red-600 text-white shadow-xl shadow-red-100' : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-100 shadow-sm'}`}>
               <span>{c.icono}</span>{c.nombre}
             </button>
           ))}
@@ -359,6 +540,24 @@ export default function WebPublica() {
       </div>
 
       <main className="max-w-6xl mx-auto px-6 pb-24">
+        {isEnabled(config.web_mostrar_destacados) && destacados.length > 0 && !catActiva && (
+          <section className="mb-10">
+            <div className="mb-5 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.28em] text-red-600">Recomendados</p>
+                <h2 className="mt-1 text-2xl font-black uppercase tracking-tight text-gray-950">Los mas pedidos</h2>
+              </div>
+              <button onClick={() => setCatActiva(null)} className="text-xs font-black uppercase tracking-widest text-gray-500">Ver carta</button>
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {destacados.map((p) => <ProductoCard key={`dest-${p.id}`} producto={p} onAgregar={agregarAlCarrito} colorPrimario={colorPrimario} />)}
+            </div>
+          </section>
+        )}
+        <div className="mb-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-red-600">Carta online</p>
+          <h2 className="mt-1 text-2xl font-black uppercase tracking-tight text-gray-950">{catActiva ? categorias.find((cat) => cat.id === catActiva)?.nombre || 'Menu' : 'Todo el menu'}</h2>
+        </div>
         <div className="grid grid-cols-1 gap-8 mt-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.isArray(productosFiltrados) && productosFiltrados.map((p) => <ProductoCard key={p.id} producto={p} onAgregar={agregarAlCarrito} colorPrimario={colorPrimario} />)}
         </div>
@@ -369,6 +568,53 @@ export default function WebPublica() {
           </div>
         )}
       </main>
+
+      {totalItems > 0 && (
+        <button
+          onClick={() => setCarritoOpen(true)}
+          className="fixed bottom-4 left-4 right-4 z-[120] flex h-16 items-center justify-between rounded-2xl bg-[#111] px-5 text-white shadow-2xl md:hidden"
+        >
+          <span className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest">
+            <ShoppingCart size={18} />
+            {totalItems} item{totalItems === 1 ? '' : 's'}
+          </span>
+          <span className="text-lg font-black">{fmt(total)}</span>
+        </button>
+      )}
+
+      {popupVisible && popupContent && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setPopupVisible(false)} />
+          <div className="relative grid w-full max-w-3xl overflow-hidden rounded-[36px] bg-white shadow-2xl md:grid-cols-[0.95fr,1.05fr]">
+            <button onClick={() => setPopupVisible(false)} className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/90 text-gray-900 shadow">
+              <X size={20} />
+            </button>
+            <div className="min-h-[240px] bg-[#111]">
+              {popupContent.imagen ? (
+                <img src={popupContent.imagen} alt={popupContent.titulo} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full min-h-[240px] items-center justify-center text-5xl font-black text-white/20">MS</div>
+              )}
+            </div>
+            <div className="flex flex-col justify-center p-8 md:p-10">
+              <p className="mb-3 text-[10px] font-black uppercase tracking-[0.28em] text-red-600">Promo destacada</p>
+              <h3 className="text-3xl font-black uppercase leading-none text-gray-950 md:text-4xl">{popupContent.titulo}</h3>
+              {popupContent.descripcion ? <p className="mt-4 text-sm font-semibold leading-6 text-gray-500">{popupContent.descripcion}</p> : null}
+              {popupContent.precio_texto ? <p className="mt-5 text-3xl font-black text-red-600">{popupContent.precio_texto}</p> : null}
+              <button
+                onClick={() => {
+                  setPopupVisible(false);
+                  handleAction(popupContent.accion_tipo, popupContent.accion_valor);
+                }}
+                className="mt-7 inline-flex h-14 w-fit items-center gap-3 rounded-2xl bg-red-600 px-6 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-red-100 transition hover:bg-red-700"
+              >
+                {popupContent.boton_texto || 'Ver promo'}
+                <ArrowRight size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {carritoOpen && (
         <div className="fixed inset-0 z-[200] flex">

@@ -10,6 +10,7 @@ import {
   Save,
   LayoutGrid,
   Smartphone,
+  MonitorSmartphone,
 } from 'lucide-react';
 import { applyBranding } from '../lib/branding.js';
 import { useAppConfig } from '../context/AppConfigContext.jsx';
@@ -20,6 +21,7 @@ import SeccionDelivery from '../components/Configuracion/SeccionDelivery.jsx';
 import SeccionRider from '../components/Configuracion/SeccionRider.jsx';
 import SeccionImpresion from '../components/Configuracion/SeccionImpresion.jsx';
 import SeccionAvanzado from '../components/Configuracion/SeccionAvanzado.jsx';
+import SeccionWebPublica from '../components/Configuracion/SeccionWebPublica.jsx';
 
 function parseJsonArray(value) {
   if (Array.isArray(value)) return value;
@@ -213,6 +215,7 @@ export default function Configuracion() {
 
   const tabs = [
     { id: 'general', label: 'General', icon: Building2, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { id: 'web', label: 'Web publica', icon: MonitorSmartphone, color: 'text-rose-600', bg: 'bg-rose-50' },
     { id: 'modulos', label: 'Modulos', icon: LayoutGrid, color: 'text-sky-600', bg: 'bg-sky-50' },
     { id: 'pagos', label: 'Pagos', icon: CreditCard, color: 'text-amber-600', bg: 'bg-amber-50' },
     { id: 'delivery', label: 'Delivery', icon: Truck, color: 'text-orange-600', bg: 'bg-orange-50' },
@@ -269,6 +272,9 @@ export default function Configuracion() {
         )}
         {activeTab === 'modulos' && (
           <SeccionModulos config={config} setToggle={setToggle} setConfig={setConfig} />
+        )}
+        {activeTab === 'web' && (
+          <SeccionWebPublica config={config} setConfig={setConfig} />
         )}
         {activeTab === 'pagos' && (
           <SeccionPagos config={config} setConfig={setConfig} f={f} setToggle={setToggle} />
