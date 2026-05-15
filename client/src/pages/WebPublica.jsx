@@ -9,6 +9,7 @@ import {
   createDeliveryQuoteState,
   getPrimaryDisplayPrice,
   getStructuredDisplayPrices,
+  normalizeText,
   safeParseArray,
 } from '../lib/pedidoForm.js';
 import { 
@@ -45,6 +46,7 @@ function buildTrackingLink(pedido) {
 function ProductoCard({ producto, onAgregar, colorPrimario }) {
   const primaryPrice = getPrimaryDisplayPrice(producto);
   const structuredPrices = getStructuredDisplayPrices(producto);
+  const isPizza = normalizeText(producto?.categoria_nombre || '').includes('pizza');
 
   return (
     <div className={`group relative flex flex-col rounded-[32px] bg-white p-4 shadow-sm transition-all duration-300 hover:shadow-[0_20px_50px_rgba(0,0,0,0.08)] hover:-translate-y-1 border border-gray-100 ${producto.disponible_para_venta === false ? 'opacity-60 grayscale' : ''}`}>
@@ -72,7 +74,7 @@ function ProductoCard({ producto, onAgregar, colorPrimario }) {
 
         <div className="mt-auto flex items-center justify-between border-t border-gray-50 pt-4">
           <div className="flex flex-col gap-1.5">
-            {structuredPrices.items.length >= 2 ? (
+            {!isPizza && structuredPrices.items.length >= 2 ? (
               <div className="flex flex-wrap gap-x-4 gap-y-1">
                 {structuredPrices.items.map((item) => (
                   <div key={item.label} className="flex flex-col">
@@ -253,6 +255,11 @@ export default function WebPublica() {
     speakAdded();
     toast.success('Producto agregado');
   };
+
+  const variantesCompletas = !variantModal || variantModal.variantes.every((group) => {
+    const selected = variantModal.sel?.[group.nombre];
+    return Boolean(selected?.nombre || selected);
+  });
 
   const hacerPedido = async () => {
     if (!form.nombre || !form.telefono) return toast.error('Completa tus datos');
@@ -460,7 +467,22 @@ export default function WebPublica() {
                 </div>
               ))}
             </div>
-            <button onClick={() => addToCart(variantModal.producto, variantModal.sel, variantModal.extrasSel)} className="mt-6 shrink-0 w-full h-16 rounded-2xl bg-[#5D87FF] text-white font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">Agregar al pedido</button>
+            {!variantesCompletas ? (
+              <p className="mt-2 shrink-0 text-center text-[10px] font-black uppercase tracking-widest text-amber-500">
+                Elegi una opcion para continuar
+              </p>
+            ) : null}
+            <button
+              onClick={() => addToCart(variantModal.producto, variantModal.sel, variantModal.extrasSel)}
+              disabled={!variantesCompletas}
+              className={`mt-4 shrink-0 w-full h-16 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${
+                variantesCompletas
+                  ? 'bg-[#5D87FF] text-white'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
+              }`}
+            >
+              Agregar al pedido
+            </button>
           </div>
         </div>
       )}

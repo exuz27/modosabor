@@ -100,13 +100,16 @@ function publicPedidoError(error) {
   const technicalPatterns = [
     'receta',
     'insumo',
-    'stock',
     'sqlite',
     'database',
     'constraint',
     'undefined',
     'null',
   ];
+
+  if (lower.includes('stock')) {
+    return 'No queda stock suficiente para completar ese pedido. Cambia el producto o avisanos por WhatsApp.';
+  }
 
   if (technicalPatterns.some((pattern) => lower.includes(pattern))) {
     console.error('[pedidos] Error interno al crear pedido publico:', message);

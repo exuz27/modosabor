@@ -33,6 +33,7 @@ export function getPrimaryDisplayPrice(producto) {
   const variantes = safeParseArray(producto?.variantes);
 
   const preferredGroups = [
+    { group: 'presentacion', option: 'entera cremoso', label: 'Entera Cremoso' },
     { group: 'presentacion', option: 'entera', label: 'Entera' },
     { group: 'presentacion', option: 'docena', label: 'Docena' },
     { group: 'tipo', option: 'ternera', label: 'Carne' },
