@@ -76,6 +76,7 @@ const uploadRestore = multer({
     message: 'Los archivos deben ser imagenes validas para restaurar uploads',
   }),
 });
+const bootstrapImportKey = String(process.env.BOOTSTRAP_IMPORT_KEY || '').trim();
 
 const SENSITIVE_KEYS = new Set([
   'mercadopago_token',
@@ -472,6 +473,42 @@ router.post('/backup/import', auth, requirePermission('config.manage'), backupUp
   return res.json({
     ok: true,
     message: 'Backup restaurado correctamente',
+    restored,
+    safety_backup: safetyBackup,
+    backups: listBackups(),
+  });
+});
+
+router.post('/backup/bootstrap-import', backupUpload.single('backup'), (req, res) => {
+  if (!bootstrapImportKey) {
+    return res.status(404).json({ error: 'Bootstrap import deshabilitado' });
+  }
+
+  const providedKey = String(req.headers['x-bootstrap-key'] || '').trim();
+  if (!providedKey || providedKey !== bootstrapImportKey) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Debes adjuntar un backup .sqlite' });
+  }
+
+  if (path.extname(req.file.filename).toLowerCase() !== '.sqlite') {
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch {}
+    return res.status(400).json({ error: 'El archivo debe ser .sqlite' });
+  }
+
+  const safetyBackup = createDatabaseBackup(db, {
+    reason: 'pre-bootstrap-import',
+    maxFiles: Number(getFullConfig().backup_max_archivos || 14),
+  });
+  const restored = restoreDatabaseBackup(db, req.file.filename, { mode: 'full' });
+
+  return res.json({
+    ok: true,
+    message: 'Backup bootstrap importado correctamente',
     restored,
     safety_backup: safetyBackup,
     backups: listBackups(),
