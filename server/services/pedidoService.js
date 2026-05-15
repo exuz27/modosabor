@@ -401,7 +401,7 @@ function createPedidoRecord(payload) {
     const { registerPedidoAttribution } = require('./marketingService');
     registerPedidoAttribution({
       pedidoId,
-      payload,
+      payload: safePayload,
       clienteId: cliente_id,
       telefono: cliente_telefono || '',
     });
