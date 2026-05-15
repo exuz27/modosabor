@@ -18,6 +18,20 @@ function parseMinutes(value) {
   return (hours * 60) + minutes;
 }
 
+function getBusinessTimeParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  return {
+    hours: Number(parts.hour || 0),
+    minutes: Number(parts.minute || 0),
+  };
+}
+
 function isNowInShift(shift, nowMinutes) {
   const from = parseMinutes(shift.desde);
   const to = parseMinutes(shift.hasta);
@@ -30,8 +44,8 @@ function isNowInShift(shift, nowMinutes) {
 
 function getCurrentShiftInfo(config) {
   const turnos = parseTurnos(config.turnos_negocio).filter((shift) => shift?.activo !== false);
-  const now = new Date();
-  const nowMinutes = (now.getHours() * 60) + now.getMinutes();
+  const now = getBusinessTimeParts(new Date());
+  const nowMinutes = (now.hours * 60) + now.minutes;
   const turnoActual = turnos.find((shift) => isNowInShift(shift, nowMinutes)) || null;
 
   return {
@@ -43,7 +57,8 @@ function getCurrentShiftInfo(config) {
 
 function getShiftForDate(config, date = new Date()) {
   const turnos = parseTurnos(config.turnos_negocio).filter((shift) => shift?.activo !== false);
-  const minutes = (date.getHours() * 60) + date.getMinutes();
+  const businessTime = getBusinessTimeParts(date);
+  const minutes = (businessTime.hours * 60) + businessTime.minutes;
   return turnos.find((shift) => isNowInShift(shift, minutes)) || null;
 }
 
@@ -73,6 +88,7 @@ function matchesPreferredShift(turnoPreferido, shiftId) {
 
 module.exports = {
   parseTurnos,
+  getBusinessTimeParts,
   getCurrentShiftInfo,
   getShiftForDate,
   getShiftLabelForDate,
