@@ -4,6 +4,7 @@ const db = require('../db');
 const auth = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const { getConfigMap, getMe } = require('../utils/mercadoPago');
 const { requirePermission } = require('../utils/permissions');
 const { logAudit, actorFromRequest } = require('../utils/audit');
@@ -60,6 +61,19 @@ const backupUpload = multer({
   fileFilter: createFileFilter({
     allowedExtensions: SQLITE_EXTENSIONS,
     message: 'El backup debe ser un archivo .sqlite',
+  }),
+});
+const uploadRestoreStorage = multer.diskStorage({
+  destination: uploadsDir,
+  filename: (_req, file, cb) => cb(null, path.basename(String(file.originalname || ''))),
+});
+const uploadRestore = multer({
+  storage: uploadRestoreStorage,
+  limits: { fileSize: 8 * 1024 * 1024, files: 100 },
+  fileFilter: createFileFilter({
+    allowedExtensions: [...IMAGE_EXTENSIONS, '.jfif', '.svg'],
+    allowedMimeTypes: [...IMAGE_MIME_TYPES, 'image/pjpeg', 'image/svg+xml', 'application/octet-stream'],
+    message: 'Los archivos deben ser imagenes validas para restaurar uploads',
   }),
 });
 
@@ -461,6 +475,18 @@ router.post('/backup/import', auth, requirePermission('config.manage'), backupUp
     restored,
     safety_backup: safetyBackup,
     backups: listBackups(),
+  });
+});
+
+router.post('/uploads/import', auth, requirePermission('config.manage'), uploadRestore.array('files', 100), (req, res) => {
+  const files = req.files || [];
+  return res.json({
+    ok: true,
+    uploaded: files.map((file) => ({
+      file: file.filename,
+      url: uploadPathFromFilename(file.filename),
+      size: file.size,
+    })),
   });
 });
 
