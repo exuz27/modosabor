@@ -9,7 +9,7 @@ const db = require('./db');
 const { startAutomaticBackups } = require('./utils/backupManager');
 const { getConfigMap } = require('./utils/mercadoPago');
 const { mergeRuntimeConfig, isPrivateNetworkUrl, isPublicHttpsUrl } = require('./utils/runtimeConfig');
-const { uploadsDir, ensureStoragePaths } = require('./utils/storagePaths');
+const { uploadsDir, ensureStoragePaths, bootstrapUploadsFromBundle } = require('./utils/storagePaths');
 const { initSocketSecurity } = require('./utils/socketRooms');
 const { isUploadValidationError, formatUploadValidationError } = require('./utils/uploadValidation');
 
@@ -77,6 +77,7 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 ensureStoragePaths();
+bootstrapUploadsFromBundle();
 app.use('/uploads', express.static(uploadsDir));
 
 const clientDistDir = path.join(__dirname, '..', 'client', 'dist');

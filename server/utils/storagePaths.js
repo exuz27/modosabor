@@ -29,6 +29,23 @@ function ensureStoragePaths() {
   ensureDir(backupsDir);
 }
 
+function isDirectoryEmpty(target) {
+  try {
+    return fs.readdirSync(target).length === 0;
+  } catch {
+    return true;
+  }
+}
+
+function bootstrapUploadsFromBundle() {
+  if (path.resolve(defaultUploadsDir) === path.resolve(uploadsDir)) return false;
+  if (!fs.existsSync(defaultUploadsDir)) return false;
+  if (!isDirectoryEmpty(uploadsDir)) return false;
+
+  fs.cpSync(defaultUploadsDir, uploadsDir, { recursive: true });
+  return true;
+}
+
 function uploadPathFromFilename(filename = '') {
   return filename ? `/uploads/${filename}` : '';
 }
@@ -49,6 +66,7 @@ module.exports = {
   dbFile,
   ensureDir,
   ensureStoragePaths,
+  bootstrapUploadsFromBundle,
   uploadPathFromFilename,
   uploadPublicPathToFile,
 };
